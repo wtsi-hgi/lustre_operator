@@ -1,0 +1,195 @@
+#!/usr/bin/perl -T
+
+use strict;
+use warnings;
+
+my $LFS_PATH = "/usr/bin/lfs";
+
+# This script is used as a wrapper for portions of the `lfs` command 
+# it takes as its first argument the mount point of a lustre filesystem 
+# and will only allow lfs commands to run on that filesystem
+
+my $lustre_fs = shift or die "Must specify lustre filesystem as first argument\n";
+
+# untaint lustre_fs by verifying that it is a lustre scratch mount point
+$lustre_fs =~ m/^(\/lustre\/scratch[0-9]+)$/ or die "Invalid lustre filesystem $lustre_fs";
+$lustre_fs = $1;
+
+my $lfs_cmd = shift or die "Must specify lfs command as second argument\n";
+my @lfs_args;
+
+if ($lfs_cmd eq "quota") {
+    # quota: Display disk usage and limits.
+    # usage: quota [<-u|-g> <uname>|<uid>|<gname>|<gid>]
+    #             [-q] [-v] [-o <obd_uuid>] <filesystem>
+    push @lfs_args, "quota";
+    my $arg = shift;
+    while (defined($arg)) {
+	if ($arg =~ m/^(-u|-g)$/) {
+	    my $uorg = $1;
+	    my $userorgroup = shift;
+	    $userorgroup =~ m/^([0-9]+|[a-z_][a-z0-9_-]{0,15})$/ or die "$uorg must be followed by <uname>|<uid>|<gname>|<gid> ($userorgroup not valid)\n";
+	    $userorgroup = $1;
+	    push @lfs_args, $uorg;
+	    push @lfs_args, $userorgroup;
+	} elsif ($arg =~ m/^(-q|-v)$/) {
+	    $arg = $1;
+	    push @lfs_args, $arg;
+	} else {
+	    die "option $arg not supported by wrapper\n";
+	}
+	$arg = shift;
+    }
+    push @lfs_args, $lustre_fs;
+} elsif ($lfs_cmd eq "setquota") {
+    # setquota: Set filesystem quotas.
+    # usage: setquota <-u|--user|-g|--group> <uname|uid|gname|gid>
+    #                 [--block-softlimit|-b <block-softlimit>] [--block-hardlimit|-B <block-hardlimit>]
+    #                 [--inode-softlimit|-i <inode-softlimit>] [--inode-hardlimit|-I <inode-hardlimit>]
+    #                 <filesystem>
+    push @lfs_args, "setquota";
+    my $uorg = shift or die "must specify <-u|-g> as first argument after setquota\n";
+    $uorg =~ m/^(-u|-g)$/ or die "first argument must be <-u|-g>\n";
+    $uorg = $1;
+    
+    my $userorgroup = shift or die "$uorg must be followed by <uname>|<uid>|<gname>|<gid>\n";
+    $userorgroup =~ m/^([0-9]+|[a-z_][a-z0-9_-]{0,15})$/ or die "$uorg must be followed by <uname>|<uid>|<gname>|<gid> ($userorgroup not valid)\n";
+    $userorgroup = $1;
+    
+    push @lfs_args, $uorg, $userorgroup;
+
+    my $arg = shift;
+    while (defined($arg)) {
+	if ($arg =~ m/^(-b|--block-softlimit)$/) {
+	    my $bsl = shift;
+	    defined($bsl) or die "must specify block-softlimit as third argument after setquota\n";
+	    $bsl =~ m/^([0-9.]+[bkmgtp]?)$/ or die "block-softlimit $bsl not valid\n";
+	    $bsl = $1;
+	    push @lfs_args, "--block-softlimit", $bsl;
+	} elsif ($arg =~ m/^(-B|--block-hardlimit)$/) {
+	    my $bhl = shift;
+	    defined($bhl) or die "must specify block-hardlimit as fourth argument after setquota\n";
+	    $bhl =~ m/^([0-9.]+[bkmgtp]?)$/ or die "block-hardlimit $bhl not valid\n";
+	    $bhl = $1;
+	    push @lfs_args, "--block-hardlimit", $bhl;
+	} elsif ($arg =~ m/^(-i|--inode-softlimit)$/) {
+	    my $isl = shift;
+	    defined($isl) or die "must specify inode-softlimit as fifth argument after setquota\n";
+	    $isl =~ m/^([0-9.]+)$/ or die "inode-softlimit $isl not valid\n";
+	    $isl = $1;
+	    push @lfs_args, "--inode-softlimit", $isl;
+	} elsif ($arg =~ m/^(-I|--inode-hardlimit)$/) {
+	    my $ihl = shift;
+	    defined($ihl) or die "must specify inode-hardlimit as sixth argument after setquota\n";
+	    $ihl =~ m/^([0-9.]+)$/ or die "inode-hardlimit $ihl not valid\n";
+	    $ihl = $1;
+	    push @lfs_args, "--inode-hardlimit", $ihl;
+	} else {
+	    die "unrecognised setquota argument $arg\n";
+	}
+	$arg = shift;
+    }
+    
+    
+    push @lfs_args, $lustre_fs;
+} elsif ($lfs_cmd eq "find") {
+    # find: To find files that match given parameters recursively in a directory tree.
+    # usage: find <directory|filename> ...
+    #      [[!] --atime|-A [+-]N] [[!] --mtime|-M [+-]N] [[!] --ctime|-C [+-]N]
+    #      [--maxdepth|-D N] [[!] --name|-n <pattern>] [--print0|-P]
+    #      [--print|-p] [[!] --obd|-O <uuid[s]>] [[!] --size|-s [+-]N[bkMGTP]]
+    #      [[!] --type|-t <filetype>] [[!] --gid|-g|--group|-G <gid>|<gname>]
+    #      [[!] --uid|-u|--user|-U <uid>|<uname>]
+    #          !: used before an option indicates 'NOT' the requested attribute
+    #          -: used before an value indicates 'AT MOST' the requested value
+    #          +: used before an option indicates 'AT LEAST' the requested value
+    push @lfs_args, "find";
+    my $matchpat = 0;
+
+    # stat the mount point to get the dev_t for the filesystem (to check each <directory|filename> entry against)
+    (my $fs_dev, undef) = stat $lustre_fs or die "could not stat mount point $lustre_fs\n";
+    
+    # the first arguments (until the first ! or -) must start with $lustre_fs
+    while (!$matchpat) {
+	my $dirorfile = shift;
+	if (!defined($dirorfile) || $dirorfile =~ m/^[-!]/) {
+	    # have an argument staring with '!' or '-' (or no argument)
+	    $matchpat = 1;
+	    unshift @ARGV, $dirorfile;
+	} else {
+            $dirorfile =~ m/^($lustre_fs.*)$/ or die "<directory|filename> $dirorfile must begin with $lustre_fs";
+	    $dirorfile = $1;
+	    # -f and -d will follow symlinks (as does `lfs find`)
+	    ( -f $dirorfile || -d $dirorfile ) or die "$dirorfile is not a plain file or directory\n";
+	    # stat also follows symlinks, so in case of symlinks it is the target stats that we will get
+	    (my $dirorfile_dev, undef) = stat $dirorfile or die "could not stat <directory|filename> $dirorfile\n";
+	    die "$dirorfile and $lustre_fs are not on the same device ($dirorfile is on device $dirorfile_dev but $lustre_fs is on device $fs_dev)\n" unless ($dirorfile_dev == $fs_dev);
+	    push @lfs_args, $dirorfile;
+	}
+    } 
+    die "must specify <directory|filename> before match paramters\n" unless (@lfs_args > 0); 
+    # now we should be in match parameters section 
+    my $arg = shift;
+    while (defined($arg)) {
+	if ($arg =~ m/^[!]$/) {
+	    push @lfs_args, '!';
+	} elsif ($arg =~ m/^(--{0,1}[a-zA-Z]{1,})$/) {
+	    $arg = $1;
+	    if ($arg =~ m/^(--print0{0,1}|-[pP])$/) {
+		# have one of the args that does not require a parameter
+		push @lfs_args, $arg;
+	    } else {
+		# option requires a parameter
+		my $param = shift;
+		# check param syntax depending on value of arg
+		if ($arg =~ m/^-(-(atime|mtime|ctime)|[AMC])$/) {
+		    # [+-]N
+		    $param =~ m/^([-+]{0,1}[0-9]+)$/ or die "parameter after $arg was not [+-]N ($param)\n";
+		    $param = $1;
+		} elsif ($arg =~ m/^-(-(maxdepth)|[D])$/) {
+		    # N
+		    $param =~ m/^([0-9]+)$/ or die "parameter after $arg was not numeric ($param)\n";
+		    $param = $1;
+		} elsif ($arg =~ m/^-(-(size)|[s])$/) {
+		    # [+-]N[bkMGTP]
+		    $param =~ m/^([-+]{0,1}[0-9]+[bkMGTP]{0,1})$/ or die "parameter after $arg was not [+-]N[bkMGTP] ($param)\n";
+		    $param = $1;
+		} elsif ($arg =~ m/^-(-(name)|[n])$/) {
+		    # <pattern>
+		    $param =~ m/^([^\/]+)$/ or die "parameter after $arg contained a '/' ($param)\n";
+		    $param = $1;
+		} elsif ($arg =~ m/^-(-(obd)|[O])$/) {
+		    # <uuid[s]>
+		    $param =~ m/^([-_,[:alnum:]]+)$/ or die "parameter after $arg was not <uuid[s]> ($param)\n";
+		    $param = $1;
+		} elsif ($arg =~ m/^-(-(type)|[t])$/) {
+		    # <filetype> == [bcdpflsD]
+		    $param =~ m/^([bcdpflsD])$/ or die "parameter after $arg was not [bcdpflsD] ($param)\n";
+		    $param = $1;
+		} elsif ($arg =~ m/^-(-(uid|user|gid|group)|[uUgG])$/) {
+		    # <gid>|<gname>|<uid>|<uname>
+		    $param =~ m/^([0-9]+|[a-z_][a-z0-9_-]{0,15})$/ or die "parameter after $arg was not <gid>|<gname>|<uid>|<uname> ($param)\n";
+		    $param = $1;
+		} else {
+		    die "unsupported find argument $arg\n";
+		}
+		push @lfs_args, $arg;
+		push @lfs_args, $param;
+	    }
+	} else {
+	    die "invalid find argument $arg\n";
+	}
+	$arg = shift;
+    }
+} else {
+    die "lfs command $lfs_cmd not supported by this wrapper script (supported commands are: quota, setquota, find)\n";
+}
+
+
+if (@lfs_args > 0) {
+    $ENV{"PATH"} = "";
+    exec { $LFS_PATH } $LFS_PATH, @lfs_args or die "couldn't exec $LFS_PATH\n";
+} else {
+    die "no arguments for $LFS_PATH\n";
+}
+
