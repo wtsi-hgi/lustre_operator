@@ -1,37 +1,89 @@
 #!/usr/bin/perl -T
+#################################################################################
+#                                                                               #
+# Copyright (c) 2013 Genome Research Ltd.                                       #
+#                                                                               #
+# Author: Joshua C. Randall <jcrandall@alum.mit.edu>                            #
+#                                                                               #
+# This program is free software: you can redistribute it and/or modify it under #
+# the terms of the GNU General Public License as published by the Free Software #
+# Foundation; either version 3 of the License, or (at your option) any later    #
+# version.                                                                      #
+#                                                                               #
+# This program is distributed in the hope that it will be useful, but WITHOUT   #
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS #
+# FOR A PARTICULAR PURPOSE. See the GNU General Public License for more         #
+# details.                                                                      #
+#                                                                               #
+# You should have received a copy of the GNU General Public License along with  #
+# this program. If not, see <http://www.gnu.org/licenses/>.                     #
+#                                                                               #
+#################################################################################
 
+
+#################################################################################
+# lustre_operator                                                               #
+#################################################################################
+#                                                                               #
+# A wrapper script for portions of the `lfs` command distributed with the       #
+# Lustre filesystem (http://lustre.org/). Currently wraps up the functionality  #
+# of the quota, setquota, and find commands.                                    #
+#                                                                               #
+# It takes as its first argument the mount point of a Lustre filesystem and     #
+# will only allow lfs commands to run against that filesystem. It is intended   #
+# with use along with sudo, as the sudoers file can specify that individual     #
+# users or groups can run this wrapper script against a limited set of Lustre   #
+# filesystems specifically listed.                                              #
+#                                                                               #
+#################################################################################
+
+
+#################################################################################
+# We avoid dependencies on libraries to avoid potential PERL5LIB security holes #
+#################################################################################
 use strict;
 use warnings;
+use 5.008_008;
 
 my $LFS_PATH = "/usr/bin/lfs";
+my $SCRIPT_NAME = "lustre_operator";
+my $NOQUOTA = "unlimited";
 
-# This script is used as a wrapper for portions of the `lfs` command 
-# it takes as its first argument the mount point of a lustre filesystem 
-# and will only allow lfs commands to run on that filesystem
+my $ILLEGAL_PATH_REGEX = qr/[\|\\\012\r\n\t\013\*\"\?\<\:\>]/;
 
-my $lustre_fs = shift or die "Must specify lustre filesystem as first argument\n";
+my $basic_usage = "Usage: $SCRIPT_NAME <lustre_mount_point>";
+my $usage = "$basic_usage quota|setquota|find [command options]";
 
-# untaint lustre_fs by verifying that it is a lustre scratch mount point
-$lustre_fs =~ m/^(\/lustre\/scratch[0-9]+)$/ or die "Invalid lustre filesystem $lustre_fs";
-$lustre_fs = $1;
+# Absolute path to lustre filesystem mount point is the first required argument
+my $lustre_mount_point = shift or die "ERROR: must specify lustre_mount_point as first argument\n$usage\n";
 
-my $lfs_cmd = shift or die "Must specify lfs command as second argument\n";
+# lfs command (quota, setquota, find) is second required argument
+my $lfs_cmd = shift or die "ERROR: must specify quota, setquota, or find as second argument\n$usage\n";
+die "Unrecognized command: $lfs_cmd\n$usage\n" unless $lfs_cmd =~ m/^(quota|setquota|find)$/;
+
+# verify that lustre_mount_point is listed in /proc/mounts or /etc/mtab (and untaint)
+$lustre_mount_point = valid_lustre_mount_point($lustre_mount_point) or die "Invalid lustre filesystem $lustre_mount_point, must specify absolute path to lustre mount point (as listed in /proc/mounts or /etc/mtab)\n";
+
 my @lfs_args;
 
 if ($lfs_cmd eq "quota") {
     # quota: Display disk usage and limits.
-    # usage: quota [<-u|-g> <uname>|<uid>|<gname>|<gid>]
-    #             [-q] [-v] [-o <obd_uuid>] <filesystem>
+    $usage = 
+"$basic_usage quota [<-u|-g> <uname>|<uid>|<gname>|<gid>]
+\t[-q] [-v] [-o <obd_uuid>]";
+
+
     push @lfs_args, "quota";
     my $arg = shift;
     while (defined($arg)) {
-	if ($arg =~ m/^(-u|-g)$/) {
+	if ($arg =~ m/^(-u|--user|-g|--group)$/) {
 	    my $uorg = $1;
+	    $uorg =~ s/^--user$/-u/;
+	    $uorg =~ s/^--group$/-g/;
 	    my $userorgroup = shift;
-	    $userorgroup =~ m/^([0-9]+|[a-z_][a-z0-9_-]{0,15})$/ or die "$uorg must be followed by <uname>|<uid>|<gname>|<gid> ($userorgroup not valid)\n";
+	    $userorgroup =~ m/^([0-9]+|[a-z_][a-z0-9_-]{0,31})$/ or die "$uorg must be followed by <uname>|<uid>|<gname>|<gid> ($userorgroup not valid)\n";
 	    $userorgroup = $1;
-	    push @lfs_args, $uorg;
-	    push @lfs_args, $userorgroup;
+	    push @lfs_args, $uorg, $userorgroup;
 	} elsif ($arg =~ m/^(-q|-v)$/) {
 	    $arg = $1;
 	    push @lfs_args, $arg;
@@ -40,58 +92,120 @@ if ($lfs_cmd eq "quota") {
 	}
 	$arg = shift;
     }
-    push @lfs_args, $lustre_fs;
+    push @lfs_args, $lustre_mount_point;
 } elsif ($lfs_cmd eq "setquota") {
     # setquota: Set filesystem quotas.
-    # usage: setquota <-u|--user|-g|--group> <uname|uid|gname|gid>
-    #                 [--block-softlimit|-b <block-softlimit>] [--block-hardlimit|-B <block-hardlimit>]
-    #                 [--inode-softlimit|-i <inode-softlimit>] [--inode-hardlimit|-I <inode-hardlimit>]
-    #                 <filesystem>
+    $usage = 
+"$basic_usage setquota -u|--user|-g|--group <uname>|<uid>|<gname>|<gid>
+\t[--block-softlimit|-b <block-softlimit>] [--block-hardlimit|-B <block-hardlimit>]
+\t[--inode-softlimit|-i <inode-softlimit>] [--inode-hardlimit|-I <inode-hardlimit>]
+\t[--force-block-hardlimit] [--force-block-softlimit]
+\t[--force-inode-hardlimit] [--force-inode-softlimit]";
+
+    my $force_block_hardlimit = 0;
+    my $force_block_softlimit = 0;
+    my $force_inode_hardlimit = 0;
+    my $force_inode_softlimit = 0;
+
     push @lfs_args, "setquota";
-    my $uorg = shift or die "must specify <-u|-g> as first argument after setquota\n";
-    $uorg =~ m/^(-u|-g)$/ or die "first argument must be <-u|-g>\n";
+
+    my $uorg = shift or die "must specify one of -u|--user|-g|--group as first argument after setquota\n$usage\n";
+    $uorg =~ m/^(-u|--user|-g|--group)$/ or die "first argument must be one of -u|--user|-g|--group\n$usage\n";
     $uorg = $1;
+    $uorg =~ s/^--user$/-u/;
+    $uorg =~ s/^--group$/-g/;
     
-    my $userorgroup = shift or die "$uorg must be followed by <uname>|<uid>|<gname>|<gid>\n";
-    $userorgroup =~ m/^([0-9]+|[a-z_][a-z0-9_-]{0,15})$/ or die "$uorg must be followed by <uname>|<uid>|<gname>|<gid> ($userorgroup not valid)\n";
+    my $userorgroup = shift or die "$uorg must be followed by <uname>|<uid>|<gname>|<gid>\n$usage\n";
+    $userorgroup =~ m/^([0-9]+|[a-z_][a-z0-9_-]{0,31})$/ or die "$uorg must be followed by valid <uname>|<uid>|<gname>|<gid> ($userorgroup not valid)\n";
     $userorgroup = $1;
     
     push @lfs_args, $uorg, $userorgroup;
-
+    
     my $arg = shift;
+    my %newquota;
     while (defined($arg)) {
 	if ($arg =~ m/^(-b|--block-softlimit)$/) {
 	    my $bsl = shift;
-	    defined($bsl) or die "must specify block-softlimit as third argument after setquota\n";
+	    defined($bsl) or die "must specify block-softlimit after [-b|--block-softlimit]\n$usage\n";
 	    $bsl =~ m/^([0-9.]+[bkmgtp]?)$/ or die "block-softlimit $bsl not valid\n";
 	    $bsl = $1;
 	    push @lfs_args, "--block-softlimit", $bsl;
+	    $newquota{"block-softlimit"} = $bsl;
 	} elsif ($arg =~ m/^(-B|--block-hardlimit)$/) {
 	    my $bhl = shift;
-	    defined($bhl) or die "must specify block-hardlimit as fourth argument after setquota\n";
+	    defined($bhl) or die "must specify block-hardlimit after [-B|--block-hardlimit]\n$usage\n";
 	    $bhl =~ m/^([0-9.]+[bkmgtp]?)$/ or die "block-hardlimit $bhl not valid\n";
 	    $bhl = $1;
 	    push @lfs_args, "--block-hardlimit", $bhl;
+	    $newquota{"block-hardlimit"} = $bhl;
 	} elsif ($arg =~ m/^(-i|--inode-softlimit)$/) {
 	    my $isl = shift;
-	    defined($isl) or die "must specify inode-softlimit as fifth argument after setquota\n";
+	    defined($isl) or die "must specify inode-softlimit after [-i|--inode-softlimit]\n$usage\n";
 	    $isl =~ m/^([0-9.]+)$/ or die "inode-softlimit $isl not valid\n";
 	    $isl = $1;
 	    push @lfs_args, "--inode-softlimit", $isl;
+	    $newquota{"inode-softlimit"} = $isl;
 	} elsif ($arg =~ m/^(-I|--inode-hardlimit)$/) {
 	    my $ihl = shift;
-	    defined($ihl) or die "must specify inode-hardlimit as sixth argument after setquota\n";
+	    defined($ihl) or die "must specify inode-hardlimit after [-I|--inode-hardlimit]\n$usage\n";
 	    $ihl =~ m/^([0-9.]+)$/ or die "inode-hardlimit $ihl not valid\n";
 	    $ihl = $1;
 	    push @lfs_args, "--inode-hardlimit", $ihl;
+	    $newquota{"inode-hardlimit"} = $ihl;
+	} elsif ($arg =~ m/^(--force-block-hardlimit)$/) {
+	    $force_block_hardlimit = 1;
+	} elsif ($arg =~ m/^(--force-block-softlimit)$/) {
+	    $force_block_softlimit = 1;
+	} elsif ($arg =~ m/^(--force-inode-hardlimit)$/) {
+	    $force_inode_hardlimit = 1;
+	} elsif ($arg =~ m/^(--force-inode-softlimit)$/) {
+	    $force_inode_softlimit = 1;
 	} else {
-	    die "unrecognised setquota argument $arg\n";
+	    die "unrecognised setquota argument $arg\n$usage\n";
 	}
 	$arg = shift;
     }
+    if (@lfs_args <= 3) {
+	die "no limits specified, nothing to do.\n$usage\n";
+    }
+    push @lfs_args, $lustre_mount_point;
     
+    # always check quota before setting and report old quota to user
+    my %existingquota = getquota($lustre_mount_point, $uorg, $userorgroup);
+#          'block-grace' => '-',
+#          'block-hardlimit' => 'none',
+#          'inode-softlimit' => 'none',
+#          'block-used' => '2734402884',
+#          'inode-hardlimit' => 'none',
+#          'inode-grace' => 'none',
+#          'block-softlimit' => 'none',
+#          'inode-used' => '135738'
+
+    # check proposed quotas against existing usage
+    if ( !$force_block_hardlimit &&
+	 !over_quota($existingquota{"block-hardlimit"}, $existingquota{"block-used"}) &&
+	 over_quota($newquota{"block-hardlimit"}, $existingquota{"block-used"}) ) {
+	die "change would put block-hardlimit over quota, refusing without --force-block-hardlimit\n";
+    }
+
+    if ( !$force_block_softlimit &&
+	 !over_quota($existingquota{"block-softlimit"}, $existingquota{"block-used"}) &&
+	 over_quota($newquota{"block-softlimit"}, $existingquota{"block-used"}) ) {
+	die "change would put block-softlimit over quota, refusing without --force-block-softlimit\n";
+    }
+
+    if ( !$force_inode_hardlimit &&
+	 !over_quota($existingquota{"inode-hardlimit"}, $existingquota{"inode-used"}) &&
+	 over_quota($newquota{"inode-hardlimit"}, $existingquota{"inode-used"}) ) {
+	die "change would put inode-hardlimit over quota, refusing without --force-inode-hardlimit\n";
+    }
+
+    if ( !$force_inode_softlimit &&
+	 !over_quota($existingquota{"inode-softlimit"}, $existingquota{"inode-used"}) &&
+	 over_quota($newquota{"inode-softlimit"}, $existingquota{"inode-used"}) ) {
+	die "change would put inode-softlimit over quota, refusing without --force-inode-softlimit\n";
+    }
     
-    push @lfs_args, $lustre_fs;
 } elsif ($lfs_cmd eq "find") {
     # find: To find files that match given parameters recursively in a directory tree.
     # usage: find <directory|filename> ...
@@ -107,9 +221,9 @@ if ($lfs_cmd eq "quota") {
     my $matchpat = 0;
 
     # stat the mount point to get the dev_t for the filesystem (to check each <directory|filename> entry against)
-    (my $fs_dev, undef) = stat $lustre_fs or die "could not stat mount point $lustre_fs\n";
+    (my $fs_dev, undef) = stat $lustre_mount_point or die "could not stat mount point $lustre_mount_point\n";
     
-    # the first arguments (until the first ! or -) must start with $lustre_fs
+    # the first arguments (until the first ! or -) must start with $lustre_mount_point
     while (!$matchpat) {
 	my $dirorfile = shift;
 	if (!defined($dirorfile) || $dirorfile =~ m/^[-!]/) {
@@ -117,13 +231,13 @@ if ($lfs_cmd eq "quota") {
 	    $matchpat = 1;
 	    unshift @ARGV, $dirorfile;
 	} else {
-            $dirorfile =~ m/^($lustre_fs.*)$/ or die "<directory|filename> $dirorfile must begin with $lustre_fs";
+            $dirorfile =~ m/^($lustre_mount_point.*)$/ or die "<directory|filename> $dirorfile must begin with $lustre_mount_point";
 	    $dirorfile = $1;
 	    # -f and -d will follow symlinks (as does `lfs find`)
 	    ( -f $dirorfile || -d $dirorfile ) or die "$dirorfile is not a plain file or directory\n";
 	    # stat also follows symlinks, so in case of symlinks it is the target stats that we will get
 	    (my $dirorfile_dev, undef) = stat $dirorfile or die "could not stat <directory|filename> $dirorfile\n";
-	    die "$dirorfile and $lustre_fs are not on the same device ($dirorfile is on device $dirorfile_dev but $lustre_fs is on device $fs_dev)\n" unless ($dirorfile_dev == $fs_dev);
+	    die "$dirorfile and $lustre_mount_point are not on the same device ($dirorfile is on device $dirorfile_dev but $lustre_mount_point is on device $fs_dev)\n" unless ($dirorfile_dev == $fs_dev);
 	    push @lfs_args, $dirorfile;
 	}
     } 
@@ -186,10 +300,152 @@ if ($lfs_cmd eq "quota") {
 }
 
 
+# if we have not died yet, we are ok to execute lfs using the args in @lfs_args
 if (@lfs_args > 0) {
-    $ENV{"PATH"} = "";
-    exec { $LFS_PATH } $LFS_PATH, @lfs_args or die "couldn't exec $LFS_PATH\n";
+    exec_lfs($LFS_PATH, @lfs_args);
 } else {
     die "no arguments for $LFS_PATH\n";
 }
 
+sub exec_lfs {
+    my $lfs_path = shift;
+    my @lfs_args = @_;
+
+    # completely squash environment before exec
+    %ENV = ();
+
+    # call exec and never return (unless command is not found)
+    exec { $LFS_PATH } $LFS_PATH, @lfs_args or die "couldn't exec $LFS_PATH\n";
+}
+
+sub getquota {
+    my $lustre_mount_point = shift;
+    my $uorg = shift;
+    my $userorgroup = shift;
+
+    # return quota data in hash
+    my %quota;
+    
+    # this code adapted from "safe pipe open for reading" 
+    # described in: http://perldoc.perl.org/perlipc.html#Safe-Pipe-Opens
+    my $pid = open(CHILD_STDOUT, "-|");
+    defined($pid) || die "can't fork: $!\n";
+    
+    if (!$pid) { # $pid is only set in parent
+	# child, call exec and never return (exec_lfs will die on error)
+	exec_lfs($LFS_PATH, "quota", $uorg, $userorgroup, $lustre_mount_point);
+	# as a safety precaution, force child to die (this should never be reached)
+	die "child process attempted to continue after exec_lfs\n";
+    } else { 
+        # parent, process data from child
+	my $usergroupline = <CHILD_STDOUT>;
+	chomp $usergroupline;
+	my $usergroupname = "";
+	my $ugid = -1;
+	if ($uorg eq '-u') {
+	    $usergroupline =~ m/user\s(\S+)/ or die "could not find user in lfs quota output\n";
+	    $usergroupname = $1;
+	    $usergroupline =~ m/uid\s([0-9]+)/ or die "could not find uid in lfs quota output\n";
+	    $ugid = $1;
+	} elsif ($uorg eq '-g') {
+	    $usergroupline =~ m/group\s(\S+)/ or die "could not find group in lfs quota output\n";
+	    $usergroupname = $1;
+	    $usergroupline =~ m/gid\s([0-9]+)/ or die "could not find gid in lfs quota output\n";
+	    $ugid = $1;
+	} else {
+	    die "invalid uorg $uorg in quotacheck\n";
+	}
+
+	my $headerline = <CHILD_STDOUT>;
+	chomp $headerline;
+	$headerline =~ m/kbytes\s+quota\s+limit\s+grace\s+files\s+quota\s+limit\s+grace\s*$/ or die "unexpected header in output from lfs quota\n";
+
+	my $fsline = <CHILD_STDOUT>;
+	chomp $fsline;
+	$fsline =~ m/^\s*$lustre_mount_point\s*$/ or die "unexpected filesystem reported from lfs quota: $fsline (expecting: $lustre_mount_point)\n";
+
+	my $quotaline = <CHILD_STDOUT>;
+	chomp $quotaline;
+	$quotaline =~ m/([0-9-]+)\s+([0-9-]+)\s+([0-9-]+)\s+(\S+)\s+([0-9-]+)\s+([0-9-]+)\s+([0-9-]+)\s+(\S+)\s*$/ or die "unexpected data in output from lfs quota: $quotaline\n";
+	$quota{"block-used"} = $1;
+	$quota{"block-softlimit"} = $2;
+	$quota{"block-hardlimit"} = $3;
+	$quota{"block-grace"} = $4;
+	$quota{"inode-used"} = $5; 
+	$quota{"inode-softlimit"} = $6;
+	$quota{"inode-hardlimit"} = $7;
+	$quota{"inode-grace"} = $8;
+
+	foreach my $key ("block-grace", "inode-grace") {
+	    $quota{$key} =~ s/^-$/$NOQUOTA/;
+	}
+
+	foreach my $key ("block-softlimit", "block-hardlimit", "inode-softlimit", "inode-hardlimit") {
+	    $quota{$key} =~ s/^0$/$NOQUOTA/;
+	}
+
+	while(my $emptyline = <CHILD_STDOUT>) {
+	    chomp $emptyline;
+	    $emptyline =~ m/^\s*$/ or die "unexpected additional output from lfs quota: $emptyline";
+	}
+	
+	close(CHILD_STDOUT) || die "child process exited: $!\n";
+    }
+
+    # only parent should reach this point, return quota
+    return %quota;
+}
+
+
+sub valid_lustre_mount_point {
+    my $lustre_mount_point = shift;
+    my $validated_mount_point = undef;
+
+    if ( valid_path($lustre_mount_point) ) {
+	# have valid path based on regex, check for it in /proc/mounts or /etc/mtab
+	my $mfile = "/proc/mounts";
+	if (! open MOUNTS, "<$mfile" ) {
+	    $mfile = "/etc/mtab";
+	    open MOUNTS, "<$mfile" or die "could not open /proc/mounts or /etc/mtab for reading\n";
+	}
+	MOUNTLINE: while( my $mountline = <MOUNTS> ) {
+	    chomp $mountline;
+	    my ($spec, $mountpoint, $type, undef) = split /\s+/, $mountline, 4;
+	    if ($mountpoint eq $lustre_mount_point) {
+		if ($type eq "lustre") {
+		    # validated, untaint
+		    $mountpoint =~ m/^(\/.*)$/ or die "did not have absolute path as mount point: $mountpoint\n";
+		    $validated_mount_point = $1;
+		    last MOUNTLINE;
+		} else {
+		    die "$lustre_mount_point was listed in $mfile but was not of type lustre\n";
+		}
+	    }
+	}
+	close MOUNTS;
+    }
+    return $validated_mount_point;
+}
+
+
+sub valid_path {
+    my $filepath = shift;
+    $filepath !~ /$ILLEGAL_PATH_REGEX/ ? 1 : undef;
+}
+
+
+sub over_quota {
+    my $quota = shift || $NOQUOTA;
+    my $used = shift || die "ERROR: over_quota called without used value\n";
+
+    $quota =~ m/^($NOQUOTA|[0-9]+)$/ or die "ERROR: quota [$quota] was neither $NOQUOTA nor an integer\n";
+
+    if (($quota eq $NOQUOTA) ||
+	($quota >= $used)) {
+	# not over quota
+	return undef;
+    } 
+    
+    # over quota
+    return 1;
+}
