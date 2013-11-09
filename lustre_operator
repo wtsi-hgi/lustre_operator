@@ -33,7 +33,7 @@ lfs command suitable for sudo use.
 
 lustre_operator B<lfs_binary> B<lustre_filesystem> B<command> [B<options>]
 
-Supports the C<quota>, C<setquota>, and C<find> lfs commands.
+Supports the C<getquota>, C<setquota>, and C<find> lfs commands.
 
 =head2 ARGUMENTS
 
@@ -46,7 +46,7 @@ in F</proc/mounts> and/or F</etc/mtab> (and reported by I<mount>).
 
 =item B<command>
 
-Command (C<quota>, C<setquota>, or C<find>) to run.
+Command (C<getquota>, C<setquota>, or C<find>) to run.
 
 =back
 
@@ -58,11 +58,11 @@ Command (C<quota>, C<setquota>, or C<find>) to run.
 
 =back
 
-=head1 QUOTA
+=head1 GETQUOTA
 
 =head2 SYNOPSIS
 
-lustre_operator B<lfs_binary> B<lustre_filesystem> quota [B<options>]
+lustre_operator B<lfs_binary> B<lustre_filesystem> getquota [B<options>]
 
 =head2 OPTIONS
 
@@ -126,15 +126,15 @@ select column to include in custom output (you can specify multiple times and or
 
 =item get quota information for the current user and group on /mnt/lustre1:
 
-C<lustre_operator /usr/bin/lfs /mnt/lustre1 quota>
+C<lustre_operator /usr/bin/lfs /mnt/lustre1 getquota>
 
 =item get quota information for user1 on /mnt/lustre1:
 
-C<lustre_operator /usr/bin/lfs /mnt/lustre1 quota --user user1>
+C<lustre_operator /usr/bin/lfs /mnt/lustre1 getquota --user user1>
 
 =item get quota information for group1 on /mnt/lustre1:
 
-C<lustre_operator /usr/bin/lfs /mnt/lustre1 quota --group group1>
+C<lustre_operator /usr/bin/lfs /mnt/lustre1 getquota --group group1>
 
 =back
 
@@ -285,6 +285,7 @@ use 5.008_008;
 use Getopt::Long qw(:config posix_default no_ignore_case);
 use Pod::Usage;
 use DateTime;
+use List::Util qw(min);
 use JSON::XS;
 
 #################################################################################
@@ -322,7 +323,7 @@ my $DECIMAL_PREFIXES = ["", "k", "M", "G", "T", "P", "E", "Z", "Y"];
 # whereas 1.2 would mean we would say "1199 B" but "1.2 kB" instead of "1200 B")
 my $HUMAN_TRIGGER_RATIO = 0.8;
 # the order of output columns in TSV
-my $COLUMN_ORDER = ["filesystem","type","name","size-used","size-softlimit","size-hardlimit","size-grace","inode-used","inode-softlimit","inode-hardlimit","inode-grace","timestamp"];
+my $COLUMN_ORDER = ["filesystem","type","name","size-used","size-softlimit","size-hardlimit","size-remaining","size-grace","inode-used","inode-softlimit","inode-hardlimit","inode-remaining","inode-grace","timestamp"];
 # separator between value and units in output
 my $OUTPUT_UNIT_SEP = "";
 
@@ -337,13 +338,11 @@ my $lustre_filesystem = shift or error_exit_usage("Must specify lustre_filesyste
 # verify that lustre_filesystem is listed in /proc/mounts or /etc/mtab (and untaint)
 $lustre_filesystem = valid_lustre_filesystem($lustre_filesystem) or error_exit("Invalid lustre filesystem [$lustre_filesystem], must specify absolute path to lustre mount point (as listed in /proc/mounts or /etc/mtab)");
 
-my $lfs_cmd = shift or error_exit_usage("Must specify quota, setquota, or find as third argument", "GENERAL");
-$lfs_cmd =~ m/^(quota|setquota|find|[-]\S+)$/ or error_exit_usage("Unrecognized command: $lfs_cmd");
+my $lfs_cmd = shift or error_exit_usage("Must specify getquota, setquota, or find as third argument", "GENERAL");
+$lfs_cmd =~ m/^(getquota|setquota|find|[-]\S+)$/ or error_exit_usage("Unrecognized command: $lfs_cmd");
 
-my @lfs_args;  #DELETEME
-
-if ($lfs_cmd eq "quota") {
-    # quota: Display disk usage and limits.
+if ($lfs_cmd eq "getquota") {
+    # getquota: Display disk usage and limits.
     my @users;
     my @groups;
     # columns to include in output (e.g. for tsv_custom format)
@@ -382,8 +381,8 @@ if ($lfs_cmd eq "quota") {
 			$time_units = "human";
 		    }
 		},
-		"help|?" => sub { exit_usage("Help for quota command:","QUOTA") },
-	) or error_exit_usage("Could not parse quota options", "QUOTA");
+		"help|?" => sub { exit_usage("Help for getquota command:","GETQUOTA") },
+	) or error_exit_usage("Could not parse getquota options", "GETQUOTA");
 
     # set default units if unset
     if (!$size_units) {
@@ -397,7 +396,7 @@ if ($lfs_cmd eq "quota") {
     }
 
     if (@users <= 0 && @groups <= 0) {
-	error_exit_usage("Nothing to do for quota: please specify user(s) and/or group(s)", "QUOTA");
+	error_exit_usage("Nothing to do for getquota: please specify user(s) and/or group(s)", "GETQUOTA");
     }
     
     if ($format =~ m/^(json|tsv|tsv_custom)$/) {
@@ -411,15 +410,14 @@ if ($lfs_cmd eq "quota") {
 	}
 	print_quotas(\%quotas, $format, $size_units, $inode_units, $time_units, \@columns);
     } else {
-	error_exit_usage("Unsupported format $format", "QUOTA");
+	error_exit_usage("Unsupported format $format", "GETQUOTA");
     }
+    exit(0);
 } elsif ($lfs_cmd eq "setquota") {
     my $force_size_hardlimit = 0;
     my $force_size_softlimit = 0;
     my $force_inode_hardlimit = 0;
     my $force_inode_softlimit = 0;
-
-    push @lfs_args, "setquota";
 
     my $uorg = shift or error_exit_usage("Must specify one of -u|--user|-g|--group as first argument after setquota");
     $uorg =~ m/^(-u|--user|-g|--group)$/ or error_exit_usage("First argument must be one of -u|--user|-g|--group");
@@ -431,8 +429,6 @@ if ($lfs_cmd eq "quota") {
     $userorgroup =~ m/^([0-9]+|[a-z_][a-z0-9_-]{0,31})$/ or error_exit("$uorg must be followed by valid <uname>|<uid>|<gname>|<gid> ($userorgroup not valid)");
     $userorgroup = $1;
     
-    push @lfs_args, $uorg, $userorgroup;
-    
     my $arg = shift;
     my %newquota;
     while (defined($arg)) {
@@ -441,28 +437,24 @@ if ($lfs_cmd eq "quota") {
 	    defined($bsl) or error_exit_usage("Must specify size-softlimit after [-b|--size-softlimit]");
 	    $bsl =~ m/^([0-9.]+[bkmgtp]?)$/ or error_exit("size-softlimit $bsl not valid");
 	    $bsl = $1;
-	    push @lfs_args, "--size-softlimit", $bsl;
 	    $newquota{"size-softlimit"} = $bsl;
 	} elsif ($arg =~ m/^(-B|--size-hardlimit)$/) {
 	    my $bhl = shift;
 	    defined($bhl) or error_exit_usage("Must specify size-hardlimit after [-B|--size-hardlimit]");
 	    $bhl =~ m/^([0-9.]+[bkmgtp]?)$/ or error_exit("size-hardlimit $bhl not valid");
 	    $bhl = $1;
-	    push @lfs_args, "--size-hardlimit", $bhl;
 	    $newquota{"size-hardlimit"} = $bhl;
 	} elsif ($arg =~ m/^(-i|--inode-softlimit)$/) {
 	    my $isl = shift;
 	    defined($isl) or error_exit_usage("Must specify inode-softlimit after [-i|--inode-softlimit]");
 	    $isl =~ m/^([0-9.]+)$/ or error_exit("inode-softlimit $isl not valid");
 	    $isl = $1;
-	    push @lfs_args, "--inode-softlimit", $isl;
 	    $newquota{"inode-softlimit"} = $isl;
 	} elsif ($arg =~ m/^(-I|--inode-hardlimit)$/) {
 	    my $ihl = shift;
 	    defined($ihl) or error_exit_usage("Must specify inode-hardlimit after [-I|--inode-hardlimit]");
 	    $ihl =~ m/^([0-9.]+)$/ or error_exit("inode-hardlimit $ihl not valid");
 	    $ihl = $1;
-	    push @lfs_args, "--inode-hardlimit", $ihl;
 	    $newquota{"inode-hardlimit"} = $ihl;
 	} elsif ($arg =~ m/^(--force-size-hardlimit)$/) {
 	    $force_size_hardlimit = 1;
@@ -477,22 +469,13 @@ if ($lfs_cmd eq "quota") {
 	}
 	$arg = shift;
     }
-    if (@lfs_args <= 3) {
+    if ( keys %newquota < 1) {
 	error_exit("no limits specified, nothing to do.");
     }
-    push @lfs_args, $lustre_filesystem;
     
     # always check quota before setting and report old quota to user
     my %existingquota = get_quota($lustre_filesystem, $uorg, $userorgroup);
-#          'size-grace' => '-',
-#          'size-hardlimit' => 'none',
-#          'inode-softlimit' => 'none',
-#          'size-used' => '2734402884',
-#          'inode-hardlimit' => 'none',
-#          'inode-grace' => 'none',
-#          'size-softlimit' => 'none',
-#          'inode-used' => '135738'
-
+    
     # check proposed quotas against existing usage
     if ( !$force_size_hardlimit &&
 	 !over_quota($existingquota{"size-hardlimit"}, $existingquota{"size-used"}) &&
@@ -517,8 +500,27 @@ if ($lfs_cmd eq "quota") {
 	 over_quota($newquota{"inode-softlimit"}, $existingquota{"inode-used"}) ) {
 	error_exit("change would put inode-softlimit over quota, refusing without --force-inode-softlimit");
     }
-    
+
+    my @lfs_args;
+    push @lfs_args, "setquota";
+    push @lfs_args, $uorg, $userorgroup;
+    if (defined($newquota{"size-softlimit"})) { 
+	push @lfs_args, "--size-softlimit", $newquota{"size-softlimit"};
+    }
+    if (defined($newquota{"size-hardlimit"})) {
+	push @lfs_args, "--size-hardlimit", $newquota{"size-hardlimit"};
+    }
+    if (defined($newquota{"inode-softlimit"})) {
+	push @lfs_args, "--inode-softlimit", $newquota{"inode-softlimit"};
+    }
+    if (defined($newquota{"inode-hardlimit"})) {
+	push @lfs_args, "--inode-hardlimit", $newquota{"inode-hardlimit"};
+    }
+    push @lfs_args, $lustre_filesystem;
+    exec_lfs(@lfs_args);
+    error_exit("unexpected error in exec_lfs setquota");
 } elsif ($lfs_cmd eq "find") {
+    my @lfs_args;
     push @lfs_args, "find";
     my $matchpat = 0;
 
@@ -597,6 +599,9 @@ if ($lfs_cmd eq "quota") {
 	}
 	$arg = shift;
     }
+    # exec to run lfs find (never to return)
+    exec_lfs(@lfs_args);
+    error_exit("unexpected error in exec_lfs find");
 } else {
     # did not specify command, check for generic options
     unshift @ARGV, $lfs_cmd;
@@ -720,6 +725,12 @@ sub get_quota {
 	
 	# record timestamp along with the data
 	$quota{"timestamp"} = DateTime->now()->iso8601();
+
+	# calculate remaining if there is a quota set
+	my @size_quotas = grep(!/^$NO_QUOTA$/, $quota{"size-softlimit"}, $quota{"size-hardlimit"});
+	$quota{"size-remaining"} = (@size_quotas > 0) ? (min(@size_quotas) - $quota{"size-used"}) : $NO_QUOTA;
+	my @inode_quotas = grep(!/^$NO_QUOTA$/, $quota{"inode-softlimit"}, $quota{"inode-hardlimit"});
+	$quota{"inode-remaining"} = (@inode_quotas > 0) ? (min(@inode_quotas) - $quota{"inode-used"}) : $NO_QUOTA;
 	
 	# shouldn't be any more output - if there is, signal an error
 	while(my $emptyline = <CHILD_STDOUT>) {
@@ -751,9 +762,9 @@ sub print_quotas {
 	    error_exit("print_quotas: type did not match for $type/$name") unless $quota->{"type"} eq $type;
 	    error_exit("print_quotas: name did not match for $type/$name") unless $quota->{"name"} eq $name;
 	    foreach my $key (keys %{$quota}) {
-		if ($key =~ m/^size-(used|softlimit|hardlimit)$/ && $quota->{$key} =~ m/^[0-9]+$/) {
+		if ($key =~ m/^size-(used|softlimit|hardlimit|remaining)$/ && $quota->{$key} =~ m/^[0-9]+$/) {
 		    $unitquotas->{$type}{$name}{$key} = convert_bytes($quota->{$key}, $size_units);
-		} elsif ($key =~ m/^inode-(used|softlimit|hardlimit)$/ && $quota->{$key} =~ m/^[0-9]+$/) {
+		} elsif ($key =~ m/^inode-(used|softlimit|hardlimit|remaining)$/ && $quota->{$key} =~ m/^[0-9]+$/) {
 		    $unitquotas->{$type}{$name}{$key} = convert_inodes($quota->{$key}, $inode_units);
 		} elsif ($key =~ m/-grace$/ && $quota->{$key} =~ m/^[0-9]+$/) {
 		    $unitquotas->{$type}{$name}{$key} = convert_seconds($quota->{$key}, $time_units);
@@ -919,7 +930,6 @@ sub valid_path {
     my $filepath = shift;
     $filepath !~ /$ILLEGAL_PATH_REGEX/ ? 1 : undef;
 }
-
 
 sub over_quota {
     my $quota = shift || $NO_QUOTA;
