@@ -31,7 +31,7 @@ lfs command suitable for sudo use.
 
 =head2 SYNOPSIS
 
-lustre_operator B<lustre_filesystem> B<command> [B<options>]
+lustre_operator B<lfs_binary> B<lustre_filesystem> B<command> [B<options>]
 
 Supports the C<quota>, C<setquota>, and C<find> lfs commands.
 
@@ -62,7 +62,7 @@ Command (C<quota>, C<setquota>, or C<find>) to run.
 
 =head2 SYNOPSIS
 
-lustre_operator B<lustre_filesystem> quota [B<options>]
+lustre_operator B<lfs_binary> B<lustre_filesystem> quota [B<options>]
 
 =head2 OPTIONS
 
@@ -70,23 +70,49 @@ lustre_operator B<lustre_filesystem> quota [B<options>]
 
 =item [--user|-u <uname>|<uid>]
 
-username or uid for a user whose quota you wish to report (you can specify this multiple times).
+username or uid for a user whose quota you wish to report 
+(you can specify this option multiple times)
 
 =item [--group|-g <gname>|<gid>]
 
-group name or gid for a group whose quota you wish to report (you can specify this multiple times).
+group name or gid for a group whose quota you wish to report 
+(you can specify this option multiple times)
 
 =item [--human|-h]
 
-use human readable units rather than bytes.
+use human readable units for both size and inode count 
+(synonym for C<--size-units human_binary --inode-units human --time-units human>)
 
-=item [--decimal|-d]
+=item [--human_decimal|-d]
 
-use decimal (kB=1000^1, MB=1000^2, GB=1000^3, ...) rather than binary (KiB=1024^1, MiB=1024^2, GiB=1024^3, ...) units
+use decimal (kB=1000^1, MB=1000^2, GB=1000^3, ...) rather 
+than binary (KiB=1024^1, MiB=1024^2, GiB=1024^3, ...) size units 
+for human readable output (synonym for 
+C<--size-units human_decimal --inode-units human --time-units human>)
+
+overrides --human
+
+=item [--size-units] <size_units>
+
+use fixed units for size. <size_units> can be: "B"|"kB"|"KiB"|"MB"|"MiB"|"GB"|"GiB"|"TB"|"TiB"|"PB"|"PiB"|"EB"|"EiB"|"ZB"|"ZiB"|"YB"|"YiB"|"human_binary"|"human_decimal"
+
+the default is <size_units>="B"
+
+=item [--inode-units] <inode_units>
+
+use fixed units for inode count. <inode_units> can be: ""|"k"|"M"|"G"|"T"|"P"|"E"|"Z"|"Y"|"human"
+
+the default is <inode_units>=""
+
+=item [--time-units] <time_units>
+
+use fixed units for grace time. <time_units> can be: "s"|"m"|"h"|"d"|"w"|"y"|"human"
+
+the default is <time_units>="s"
 
 =item [--format|-f] <format>
 
-specify output format (currently support "json", "tsv", and "tsv_custom")
+specify output format. <format> can be: "json"|"tsv"|"tsv_custom"
 
 =item [--column|-c] <column_header>
 
@@ -100,15 +126,15 @@ select column to include in custom output (you can specify multiple times and or
 
 =item get quota information for the current user and group on /mnt/lustre1:
 
-C<lustre_operator /mnt/lustre1 quota>
+C<lustre_operator /usr/bin/lfs /mnt/lustre1 quota>
 
 =item get quota information for user1 on /mnt/lustre1:
 
-C<lustre_operator /mnt/lustre1 quota --user user1>
+C<lustre_operator /usr/bin/lfs /mnt/lustre1 quota --user user1>
 
 =item get quota information for group1 on /mnt/lustre1:
 
-C<lustre_operator /mnt/lustre1 quota --group group1>
+C<lustre_operator /usr/bin/lfs /mnt/lustre1 quota --group group1>
 
 =back
 
@@ -116,7 +142,7 @@ C<lustre_operator /mnt/lustre1 quota --group group1>
 
 =head2 SYNOPSIS
 
-lustre_operator B<lustre_filesystem> setquota 
+lustre_operator B<lfs_binary> B<lustre_filesystem> setquota 
 -u|--user|-g|--group <uname>|<uid>|<gname>|<gid> [options]
 
 =head2 OPTIONS
@@ -158,19 +184,19 @@ Specify user or group by either name or number.
 =item set the quota for user user2 on /mnt/lustre2 to 1 TebiByte 
 (1024^4 bytes) and 1 million inodes (files):
 
-C<lustre_operator /mnt/lustre1 setquota --user user2 
+C<lustre_operator /usr/bin/lfs /mnt/lustre1 setquota --user user2 
 --size-hardlimit 1TiB  --inode-hardlimit 1M>
 
 =item set the quota for group group2 on /mnt/lustre2 to 100 megabytes 
 (100 * 1000^2 bytes) and 1500 inodes:
 
-C<lustre_operator /mnt/lustre2 setquota --group group2 
+C<lustre_operator /usr/bin/lfs /mnt/lustre2 setquota --group group2 
 --size-hardlimit 100MB --inode-hardlimit 1.5k>
 
 =item set the quota for group group2 on /mnt/lustre2 to 1 block and 
 1 inode (this is the minimum quota):
 
-C<lustre_operator /mnt/lustre2 setquota --group group2 
+C<lustre_operator /usr/bin/lfs /mnt/lustre2 setquota --group group2 
 --size-hardlimit 1 --inode-hardlimit 1>
 
 =back
@@ -179,7 +205,7 @@ C<lustre_operator /mnt/lustre2 setquota --group group2
 
 =head2 SYNOPSIS
 
-lustre_operator B<lustre_filesystem> find B<dir|file> [options]
+lustre_operator B<lfs_binary> B<lustre_filesystem> find B<dir|file> [options]
 
 =head2 ARGUMENTS
 
@@ -239,7 +265,7 @@ Path from which to begin the recursive find.
 
 =item find all files named F<*file*> under /mnt/lustre/dir3:
 
-C<lustre_operator /mnt/lustre3 find /mnt/lustre3/dir3 --name \*file\*>
+C<lustre_operator /usr/bin/lfs /mnt/lustre3 find /mnt/lustre3/dir3 --name \*file\*>
 
 =back
 
@@ -264,8 +290,6 @@ use JSON::XS;
 #################################################################################
 # Configuration
 #################################################################################
-# absolute path to the lfs binary
-my $LFS_BIN 	       = "/usr/bin/lfs";
 # the block size that Lustre uses to set and report quota (in Bytes)
 my $LFS_BLOCKSIZE      = 1024; 
 # the value lfs reports when quota grace time is not active (e.g. not over soft)
@@ -285,30 +309,37 @@ my $TIMER_INACTIVE     = "inactive";
 # regular expression matching illegal filename/path characters
 my $ILLEGAL_PATH_REGEX = qr/[\|\\\012\r\n\t\013\*\"\?\<\:\>]/; 
 # binary SI units labels from bytes to yobibytes
-my $HUMAN_BINARY_UNIT_LABELS  = ["B","KiB","MiB","GiB","TiB","PiB","EiB","ZiB","YiB"];
+my $BINARY_UNIT_LABELS  = ["B","KiB","MiB","GiB","TiB","PiB","EiB","ZiB","YiB"];
 # decimal SI unit labels from bytes to yottabytes
-my $HUMAN_DECIMAL_UNIT_LABELS = ["B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
+my $DECIMAL_UNIT_LABELS = ["B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
+# time unit labels from seconds to years
+my $TIME_UNIT_LABELS = ["s", "m",  "h",   "d",    "w",      "y"];
+my $TIME_UNIT_RATIOS = [  1,  60, 3600, 86400, 604800, 31536000];
 # for unitless inode counts
-my $HUMAN_DECIMAL_PREFIXES = ["B", "k", "M", "G", "T", "P", "E", "Z", "Y"];
+my $DECIMAL_PREFIXES = ["", "k", "M", "G", "T", "P", "E", "Z", "Y"];
 # ratio of the next unit value at which to switch to it 
 # (e.g. 0.8 implies we would say "0.8 kB" instead of "800 B" 
 # whereas 1.2 would mean we would say "1199 B" but "1.2 kB" instead of "1200 B")
 my $HUMAN_TRIGGER_RATIO = 0.8;
 # the order of output columns in TSV
 my $COLUMN_ORDER = ["filesystem","type","name","size-used","size-softlimit","size-hardlimit","size-grace","inode-used","inode-softlimit","inode-hardlimit","inode-grace","timestamp"];
+# separator between value and units in output
+my $OUTPUT_UNIT_SEP = "";
 
 #################################################################################
 # Process command-line
 #################################################################################
-my $lustre_filesystem = shift or error_exit_usage("Must specify lustre_filesystem as first argument", "GENERAL");
+my $lfs_bin = shift or error_exit_usage("Must specify absolute path to lfs binary as first argument", "GENERAL");
+(-x $lfs_bin && (-f $lfs_bin || -l $lfs_bin)) or error_exit_usage("Specified lfs binary [$lfs_bin] is not executable", "GENERAL");
 
-my $lfs_cmd = shift or error_exit_usage("Must specify quota, setquota, or find as second argument", "GENERAL");
+my $lustre_filesystem = shift or error_exit_usage("Must specify lustre_filesystem as second argument", "GENERAL");
+# verify that lustre_filesystem is listed in /proc/mounts or /etc/mtab (and untaint)
+$lustre_filesystem = valid_lustre_filesystem($lustre_filesystem) or error_exit("Invalid lustre filesystem [$lustre_filesystem], must specify absolute path to lustre mount point (as listed in /proc/mounts or /etc/mtab)");
+
+my $lfs_cmd = shift or error_exit_usage("Must specify quota, setquota, or find as third argument", "GENERAL");
 $lfs_cmd =~ m/^(quota|setquota|find|[-]\S+)$/ or error_exit_usage("Unrecognized command: $lfs_cmd");
 
-# verify that lustre_filesystem is listed in /proc/mounts or /etc/mtab (and untaint)
-$lustre_filesystem = valid_lustre_filesystem($lustre_filesystem) or error_exit("Invalid lustre filesystem $lustre_filesystem, must specify absolute path to lustre mount point (as listed in /proc/mounts or /etc/mtab)");
-
-my @lfs_args;
+my @lfs_args;  #DELETEME
 
 if ($lfs_cmd eq "quota") {
     # quota: Display disk usage and limits.
@@ -316,34 +347,73 @@ if ($lfs_cmd eq "quota") {
     my @groups;
     # columns to include in output (e.g. for tsv_custom format)
     my @columns;
-    # human-readable output (e.g. use sensible units rather than just bytes)
-    my $human = 0;
-    # use SI decimal units (kB, MB, GB, TB, ...) instead of binary (KiB, MiB, GiB, TiB, ...)
-    my $decimal = 0;
+    my $size_units;
+    my $inode_units;
+    my $time_units;
     # format: json, tsv, or tsv_custom (default: tsv)
     my $format = "tsv"; 
     GetOptions( "user|u=s" => \@users,
 		"group|g=s" => \@groups,
 		"column|c=s" => \@columns,
 		"format|f=s" => \$format,
-		"human|h" => \$human,
-		"decimal|d" => \$decimal,
+		"size-units=s" => \$size_units,
+		"inode-units=s" => \$inode_units,
+		"time-units=s" => \$time_units,
+		"human|h" => sub {
+		    if (!$size_units) {
+			$size_units = "human_binary";
+		    }
+		    if (!$inode_units) {
+			$inode_units = "human";
+		    }
+		    if (!$time_units) {
+			$time_units = "human";
+		    }
+		},
+		"human_decimal|d" => sub {
+		    if (!$size_units) {
+			$size_units = "human_decimal";
+		    }
+		    if (!$inode_units) {
+			$inode_units = "human";
+		    }
+		    if (!$time_units) {
+			$time_units = "human";
+		    }
+		},
 		"help|?" => sub { exit_usage("Help for quota command:","QUOTA") },
 	) or error_exit_usage("Could not parse quota options", "QUOTA");
-    
+
+    # set default units if unset
+    if (!$size_units) {
+	$size_units = "B";
+    }
+    if (!$inode_units) {
+	$inode_units = "";
+    }
+    if (!$time_units) {
+	$time_units = "s";
+    }
+
     if (@users <= 0 && @groups <= 0) {
 	error_exit_usage("Nothing to do for quota: please specify user(s) and/or group(s)", "QUOTA");
     }
     
-    my %quotas;
-    foreach my $user (@users) {
-	$quotas{user}{$user} = get_quota($lustre_filesystem, "user", $user);
+    if ($format =~ m/^(json|tsv|tsv_custom)$/) {
+	# get quota into hash
+	my %quotas;
+	foreach my $user (@users) {
+	    $quotas{user}{$user} = get_quota($lustre_filesystem, "user", $user);
+	}
+	foreach my $group (@groups) {
+	    $quotas{group}{$group} = get_quota($lustre_filesystem, "group", $group);
+	}
+	$quotas{group}{"testquota"} = test_quota();
+
+	print_quotas(\%quotas, $format, $size_units, $inode_units, $time_units, \@columns);
+    } else {
+	error_exit_usage("Unsupported format $format", "QUOTA");
     }
-    foreach my $group (@groups) {
-	$quotas{group}{$group} = get_quota($lustre_filesystem, "group", $group);
-    }
-    print_quotas(\%quotas, $format, $human, $decimal, \@columns);
-    
 } elsif ($lfs_cmd eq "setquota") {
     my $force_size_hardlimit = 0;
     my $force_size_softlimit = 0;
@@ -551,9 +621,11 @@ sub exec_lfs {
     %ENV = ();
 
     # call exec and never return (unless command is not found)
-    exec { $LFS_BIN } $LFS_BIN, @lfs_args or error_exit("couldn't exec $LFS_BIN");
+    exec { $lfs_bin } $lfs_bin, @lfs_args or error_exit("couldn't exec $lfs_bin");
 }
 
+# returns quota data as a hashref
+# units are in bytes (not blocks or kB), inodes, and seconds
 sub get_quota {
     my $filesystem = shift;
     my $quota_type = shift; # "user" or "group"
@@ -667,30 +739,29 @@ sub get_quota {
 sub print_quotas {
     my $quotas = shift;
     my $format = shift || "tsv";
-    my $human = shift || 0; 
-    my $decimal = shift || 0; 
+    my $size_units = shift; 
+    my $inode_units = shift; 
+    my $time_units = shift; 
     my $columns = shift;
 
     my $unitquotas;
-    if ($human) {
-	foreach my $type (keys %{$quotas}) {
-	    foreach my $name (keys %{$quotas->{$type}}) {
-		my $quota = $quotas->{$type}->{$name};
-		exit_error("print_quotas: type did not match for $type/$name") unless $quota->{"type"} eq $type;
-		exit_error("print_quotas: name did not match for $type/$name") unless $quota->{"name"} eq $name;
-		foreach my $key (keys %{$quota}) {
-		    if ($key =~ m/^size-/ && $quota->{$key} =~ m/^[0-9]+$/) {
-			$unitquotas->{$type}{$name}{$key} = human_bytes_format($quota->{$key}, $decimal);
-		    } elsif($key =~ m/^inode-/ && $quota->{$key} =~ m/^[0-9]+$/) {
-			$unitquotas->{$type}{$name}{$key} = human_inode_format($quota->{$key});
-		    } else {
-			$unitquotas->{$type}{$name}{$key} = $quota->{$key};
-		    }
+    foreach my $type (keys %{$quotas}) {
+	foreach my $name (keys %{$quotas->{$type}}) {
+	    my $quota = $quotas->{$type}->{$name};
+	    error_exit("print_quotas: type did not match for $type/$name") unless $quota->{"type"} eq $type;
+	    error_exit("print_quotas: name did not match for $type/$name") unless $quota->{"name"} eq $name;
+	    foreach my $key (keys %{$quota}) {
+		if ($key =~ m/^size-(used|softlimit|hardlimit)$/ && $quota->{$key} =~ m/^[0-9]+$/) {
+		    $unitquotas->{$type}{$name}{$key} = convert_bytes($quota->{$key}, $size_units);
+		} elsif ($key =~ m/^inode-(used|softlimit|hardlimit)$/ && $quota->{$key} =~ m/^[0-9]+$/) {
+		    $unitquotas->{$type}{$name}{$key} = convert_inodes($quota->{$key}, $inode_units);
+		} elsif ($key =~ m/-grace$/ && $quota->{$key} =~ m/^[0-9]+$/) {
+		    $unitquotas->{$type}{$name}{$key} = convert_seconds($quota->{$key}, $time_units);
+		} else {
+		    $unitquotas->{$type}{$name}{$key} = $quota->{$key};
 		}
 	    }
 	}
-    } else {
-	$unitquotas = $quotas;
     }
     
     if (lc($format) eq 'json') {
@@ -728,8 +799,8 @@ sub print_quotas_tsv {
     foreach my $type (keys %{$quotas}) {
 	foreach my $name (keys %{$quotas->{$type}}) {
 	    my $quota = $quotas->{$type}->{$name};
-	    exit_error("print_quotas: type did not match for $type/$name") unless $quota->{"type"} eq $type;
-	    exit_error("print_quotas: name did not match for $type/$name") unless $quota->{"name"} eq $name;
+	    error_exit("print_quotas: type did not match for $type/$name") unless $quota->{"type"} eq $type;
+	    error_exit("print_quotas: name did not match for $type/$name") unless $quota->{"name"} eq $name;
 	    print join("\t", map {$quota->{$_}} @{$columns})."\n";
 	}
     }
@@ -740,10 +811,10 @@ sub human_bytes_format {
     my $decimal = shift;
     
     my $base = 1024;
-    my @labels = @{$HUMAN_BINARY_UNIT_LABELS};
+    my @labels = @{$BINARY_UNIT_LABELS};
     if($decimal) {
 	$base = 1000;
-	@labels = @{$HUMAN_DECIMAL_UNIT_LABELS};
+	@labels = @{$DECIMAL_UNIT_LABELS};
     }
     
     my $unit_index = 0;
@@ -756,14 +827,14 @@ sub human_bytes_format {
 	$unit_index++;
     }
     
-    return sprintf("%.1f%s", $bytes / ($base ** $unit_index), $labels[$unit_index]);
+    return sprintf("%.1f%s%s", $bytes / ($base ** $unit_index), $OUTPUT_UNIT_SEP, $labels[$unit_index]);
 }
 
 sub human_inode_format {
     my $count = shift;
     
     my $base = 1000;
-    my @labels = @{$HUMAN_DECIMAL_PREFIXES};
+    my @labels = @{$DECIMAL_PREFIXES};
     
     my $unit_index = 0;
     TESTUNIT: while($unit_index < $#labels) { # only need to test n-1 as we'll stay in the final unit
@@ -775,7 +846,27 @@ sub human_inode_format {
 	$unit_index++;
     }
     
-    return sprintf("%.1f%s", $count / ($base ** $unit_index), $labels[$unit_index]);
+    return sprintf("%.1f%s%s", $count / ($base ** $unit_index), $OUTPUT_UNIT_SEP, $labels[$unit_index]);
+}
+
+sub human_time_format {
+    my $seconds = shift;
+    
+    my $result = "";
+    my $remaining = $seconds;
+    # convert to ywdhms format (only including the largest non-zero)
+    for (my $i=@{$TIME_UNIT_RATIOS}-1; $i>0; $i--) {
+	if ( ($seconds / $TIME_UNIT_RATIOS->[$i]) > 1) {
+	    # include the i-th part in output
+	    my $part = int($remaining / $TIME_UNIT_RATIOS->[$i]);
+	    $result .= $part.$TIME_UNIT_LABELS->[$i];
+	    $remaining -= $part * $TIME_UNIT_RATIOS->[$i];
+	}
+    }
+    # add in the remaining seconds (0th unit)
+    $result .= $remaining.$TIME_UNIT_LABELS->[0];
+
+    return $result;
 }
 
 sub valid_lustre_filesystem {
@@ -940,8 +1031,72 @@ sub lfs_grace_to_seconds {
     return $seconds;
 }
 
+sub convert_bytes {
+    my $bytes = shift;
+    my $units = shift;
+    if ($units) {
+	if ($units eq 'human_binary') {
+	    return human_bytes_format($bytes, 0);
+	} elsif ($units eq 'human_decimal') {
+	    return human_bytes_format($bytes, 1);
+	} elsif ($units eq 'B') {
+	    return $bytes.$OUTPUT_UNIT_SEP."B";
+	} elsif ($units ne 'B') {
+	    # fixed unit specification requiring conversion
+	    for (my $i=1; $i<@{$BINARY_UNIT_LABELS}; $i++) {
+		if ($BINARY_UNIT_LABELS->[$i] eq $units) {
+		    return sprintf("%.1f%s%s", ($bytes / (1024 ** $i)), $OUTPUT_UNIT_SEP, $units);
+		}
+		if ($DECIMAL_UNIT_LABELS->[$i] eq $units) {
+		    return sprintf("%.1f%s%s", ($bytes / (1000 ** $i)), $OUTPUT_UNIT_SEP, $units);
+		}
+	    }
+	}
+	error_exit("unknown size units [$units]. specify one of: ".join(', ', @{$BINARY_UNIT_LABELS}, @{$DECIMAL_UNIT_LABELS}, 'human_binary', 'human_decimal'));
+    }
+    error_exit("convert_bytes called without units specified");
+}
 
+sub convert_inodes {
+    my $inodes = shift;
+    my $units = shift;
+    if ($units) {
+	if ($units eq 'human') {
+	    return human_inode_format($inodes);
+	} else {
+	    # fixed unit specification
+	    for (my $i=1; $i<@{$DECIMAL_PREFIXES}; $i++) {
+		if ($DECIMAL_PREFIXES->[$i] eq $units) { 
+		    return sprintf("%.1f%s%s", ($inodes / (1024 ** $i)), $OUTPUT_UNIT_SEP, $units);
+		}
+	    }
+	}
+	error_exit("unknown inode units [$units]. specify one of: ".join(', ', @{$DECIMAL_PREFIXES}, 'human'));
+    } else {
+	return $inodes;
+    }
+} 
 
+sub convert_seconds {
+    my $gracetime = shift;
+    my $units = shift;
+    if ($units) {
+	if ($units eq 'human') {
+	    return human_time_format($gracetime);
+	} elsif ($units eq 's') {
+	    return $gracetime.$OUTPUT_UNIT_SEP."s";
+	} else {
+	    # fixed unit specification
+	    for (my $i=1; $i<@{$TIME_UNIT_LABELS}; $i++) {
+		if ($TIME_UNIT_LABELS->[$i] eq $units) {
+		    return sprintf("%.1f%s%s", ($gracetime / $TIME_UNIT_RATIOS->[$i]), $OUTPUT_UNIT_SEP, $units);
+		}
+	    }
+	}
+	error_exit("unknown gracetime units [$units]. specify one of: ".join(', ', @{$TIME_UNIT_LABELS}, 'human'));
+    } 
+    error_exit("convert_seconds called without units specified");
+}
 
 __END__
 
@@ -973,8 +1128,8 @@ to this script followed by the mount point of the Lustre file system for
 which they are allowed to run it.
 
 For example:
-C<user1 ALL = (root) NOPASSWD : /usr/local/bin/lustre_operator /mnt/lustre1, \
-                              /usr/local/bin/lustre_operator /mnt/lustre2>
+C<user1 ALL = (root) NOPASSWD : /usr/local/bin/lustre_operator /usr/bin/lfs /mnt/lustre1, \
+                              /usr/local/bin/lustre_operator /usr/bin/lfs /mnt/lustre2>
 
 
 =head1 DEPENDENCIES
