@@ -330,6 +330,7 @@ my $OUTPUT_UNIT_SEP = "";
 # Process command-line
 #################################################################################
 my $lfs_bin = shift or error_exit_usage("Must specify absolute path to lfs binary as first argument", "GENERAL");
+$lfs_bin = untaint_valid_abs_path($lfs_bin) or error_exit_usage("Specified lfs binary [$lfs_bin] is not an absolute path", "GENERAL");
 (-x $lfs_bin && (-f $lfs_bin || -l $lfs_bin)) or error_exit_usage("Specified lfs binary [$lfs_bin] is not executable", "GENERAL");
 
 my $lustre_filesystem = shift or error_exit_usage("Must specify lustre_filesystem as second argument", "GENERAL");
@@ -408,8 +409,6 @@ if ($lfs_cmd eq "quota") {
 	foreach my $group (@groups) {
 	    $quotas{group}{$group} = get_quota($lustre_filesystem, "group", $group);
 	}
-	$quotas{group}{"testquota"} = test_quota();
-
 	print_quotas(\%quotas, $format, $size_units, $inode_units, $time_units, \@columns);
     } else {
 	error_exit_usage("Unsupported format $format", "QUOTA");
@@ -632,7 +631,7 @@ sub get_quota {
     my $quota_name = shift; # user or group name
 
     # validate arguments and untaint
-    valid_path($filesystem) or error_exit("get_quota: filesystem $filesystem not valid");
+    valid_abs_path($filesystem) or error_exit("get_quota: filesystem $filesystem not valid");
     $filesystem =~ m/^(\/.*)$/;
     $filesystem = $1;
     $quota_name =~ m/^([0-9]+|[a-z_][a-z0-9_-]{0,31})$/ or error_exit("user/group name $quota_name not valid");
@@ -662,6 +661,7 @@ sub get_quota {
 	$quota{"name"} = $quota_name;
 	
 	my $usergroupline = <CHILD_STDOUT>;
+	defined($usergroupline) or error_exit("no output from lfs quota");
 	chomp $usergroupline;
 	my $usergroupname = "";
 	my $ugid = -1;
@@ -873,7 +873,7 @@ sub valid_lustre_filesystem {
     my $lustre_filesystem = shift;
     my $validated_filesystem = undef;
 
-    if ( valid_path($lustre_filesystem) ) {
+    if ( valid_abs_path($lustre_filesystem) ) {
 	# have valid path based on regex, check for it in /proc/mounts or /etc/mtab
 	my $mfile = "/proc/mounts";
 	if (! open MOUNTS, "<$mfile" ) {
@@ -899,6 +899,21 @@ sub valid_lustre_filesystem {
     return $validated_filesystem;
 }
 
+sub untaint_valid_abs_path {
+    my $filepath = shift;
+    if (valid_abs_path($filepath)) {
+	$filepath =~ m/^(\/.*)$/;
+	$filepath = $1;
+	return $filepath;
+    } else {
+	return undef;
+    }
+}
+
+sub valid_abs_path {
+    my $filepath = shift;
+    ($filepath =~ /^\//) and valid_path($filepath) ? 1 : undef;
+}
 
 sub valid_path {
     my $filepath = shift;
