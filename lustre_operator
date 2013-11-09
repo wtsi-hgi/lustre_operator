@@ -661,27 +661,27 @@ sub get_quota {
 	$quota{"name"} = $quota_name;
 	
 	my $usergroupline = <CHILD_STDOUT>;
-	defined($usergroupline) or error_exit("no output from lfs quota");
+	defined($usergroupline) or error_exit("no output from lfs quota for $filesystem $quota_type $quota_name");
 	chomp $usergroupline;
 	my $usergroupname = "";
 	my $ugid = -1;
 	if ($quota_type eq 'user') {
-	    $usergroupline =~ m/user\s(\S+)/ or error_exit("could not find user in lfs quota output");
+	    $usergroupline =~ m/user\s(\S+)/ or error_exit("could not find user in lfs quota output for $filesystem $quota_type $quota_name");
 	    $usergroupname = $1;
-	    $usergroupline =~ m/uid\s([0-9]+)/ or error_exit("could not find uid in lfs quota output");
+	    $usergroupline =~ m/uid\s([0-9]+)/ or error_exit("could not find uid in lfs quota output for $filesystem $quota_type $quota_name");
 	    $ugid = $1;
 	} elsif ($quota_type eq 'group') {
-	    $usergroupline =~ m/group\s(\S+)/ or error_exit("could not find group in lfs quota output");
+	    $usergroupline =~ m/group\s(\S+)/ or error_exit("could not find group in lfs quota output for $filesystem $quota_type $quota_name");
 	    $usergroupname = $1;
-	    $usergroupline =~ m/gid\s([0-9]+)/ or error_exit("could not find gid in lfs quota output");
+	    $usergroupline =~ m/gid\s([0-9]+)/ or error_exit("could not find gid in lfs quota output for $filesystem $quota_type $quota_name");
 	    $ugid = $1;
 	} else {
-	    error_exit("invalid quota_type $quota_type in quotacheck");
+	    error_exit("invalid quota_type $quota_type in quotacheck for $filesystem $quota_type $quota_name");
 	}
 
 	my $headerline = <CHILD_STDOUT>;
 	chomp $headerline;
-	$headerline =~ m/kbytes\s+quota\s+limit\s+grace\s+files\s+quota\s+limit\s+grace\s*$/ or error_exit("unexpected header in output from lfs quota");
+	$headerline =~ m/kbytes\s+quota\s+limit\s+grace\s+files\s+quota\s+limit\s+grace\s*$/ or error_exit("unexpected header in output from lfs quota for $filesystem $quota_type $quota_name");
 
 	my $fsline = <CHILD_STDOUT>;
 	chomp $fsline;
@@ -705,7 +705,7 @@ sub get_quota {
                         \s+
                         (\S+|$LFS_GRACE_INACTIVE)           # $10 - inode grace time remaining
                         \s*
-                        $/x or error_exit("unexpected data in output from lfs quota: $quotaline");
+                        $/x or error_exit("unexpected data in output from lfs quota for $filesystem $quota_type $quota_name: [$quotaline]");
 	# post-process into standard units (bytes, inodes, seconds)
 	$quota{"size-used"} = lfs_blocks_to_bytes($1);
 	$quota{"size-overquota"} = $2;
@@ -724,16 +724,16 @@ sub get_quota {
 	# shouldn't be any more output - if there is, signal an error
 	while(my $emptyline = <CHILD_STDOUT>) {
 	    chomp $emptyline;
-	    $emptyline =~ m/^\s*$/ or error_exit("unexpected additional output from lfs quota: $emptyline");
+	    $emptyline =~ m/^\s*$/ or error_exit("unexpected additional output from lfs quota for $filesystem $quota_type $quota_name: $emptyline");
 	}
 	
-	close(CHILD_STDOUT) or error_exit("child process exited: $!");
+	close(CHILD_STDOUT) or error_exit("lfs quota child process exited for $filesystem $quota_type $quota_name: $!");
 
 	return \%quota;
     }
 
     # this point should not be reached
-    error_exit("unexpected error in get_quota");
+    error_exit("unexpected error in get_quota for $filesystem $quota_type $quota_name");
 }
 
 sub print_quotas {
