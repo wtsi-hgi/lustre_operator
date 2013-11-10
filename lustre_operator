@@ -20,17 +20,20 @@
 # 
 #################################################################################
 
-package lustre_operator;
-
 use strict;
 use warnings;
 use 5.008_008;
 
+package lustre_operator;
+
 
 #################################################################################
 # In taint mode, '.' is removed from @INC and PERL5LIB is ignored so we can 
-# safely depend on only getting modules from directories compiled into perl
+# safely depend on only getting modules from only directories compiled into perl
 # (see http://perldoc.perl.org/perlsec.html#Taint-mode-and-@INC)
+# 
+# This means all of the below modules MUST be located in the system PERL5LIB --
+# this is intentional for the security of this script. 
 #################################################################################
 use Getopt::Long qw(GetOptionsFromArray :config posix_default no_ignore_case);
 use Pod::Usage;
@@ -95,6 +98,13 @@ my $COLUMN_ORDER = ["filesystem","type","name","size-used","size-softlimit","siz
 my $OUTPUT_UNIT_SEP = "";
 
 
+#################################################################################
+# If run as a script (rather than used or required from elsewhere), pass 
+# command-line arguments to run. 
+#################################################################################
+lustre_operator::run(@ARGV) unless caller();
+
+
 =head1 NAME
 
 lustre_operator - a wrapper script for Lustre's 
@@ -104,13 +114,17 @@ lfs command suitable for sudo use.
 
 =head2 SYNOPSIS
 
-lustre_operator B<lfs_binary> B<lustre_filesystem> B<command> [B<options>]
+lustre_operator B<<lfs_binary>> B<<lustre_filesystem>> B<<command>> [B<<options>>]
 
 Supports the C<getquota>, C<setquota>, and C<find> lfs commands.
 
 =head2 ARGUMENTS
 
 =over
+
+=item B<lfs_binary>
+
+An absolute path to the lfs binary.
 
 =item B<lustre_filesystem>
 
@@ -135,18 +149,18 @@ Command (C<getquota>, C<setquota>, or C<find>) to run.
 
 =head2 SYNOPSIS
 
-lustre_operator B<lfs_binary> B<lustre_filesystem> getquota [B<options>]
+lustre_operator B<<lfs_binary>> B<<lustre_filesystem>> getquota [B<<options>>]
 
 =head2 OPTIONS
 
 =over
 
-=item [--user|-u <uname>|<uid>]
+=item [--user|-u <<uname>>|<<uid>>]
 
 username or uid for a user whose quota you wish to report 
 (you can specify this option multiple times)
 
-=item [--group|-g <gname>|<gid>]
+=item [--group|-g <<gname>>|<<gid>>]
 
 group name or gid for a group whose quota you wish to report 
 (you can specify this option multiple times)
@@ -165,29 +179,29 @@ C<--size-units human_decimal --inode-units human --time-units human>)
 
 overrides --human
 
-=item [--size-units|-s] <size_units>
+=item [--size-units|-s] <<size_units>>
 
-use specified units for size. <size_units> can be: ""|"B"|"kB"|"KiB"|"MB"|"MiB"|"GB"|"GiB"|"TB"|"TiB"|"PB"|"PiB"|"EB"|"EiB"|"ZB"|"ZiB"|"YB"|"YiB"|"human_binary"|"human_decimal"
+use specified units for size. <<size_units>> can be: ""|"B"|"kB"|"KiB"|"MB"|"MiB"|"GB"|"GiB"|"TB"|"TiB"|"PB"|"PiB"|"EB"|"EiB"|"ZB"|"ZiB"|"YB"|"YiB"|"human_binary"|"human_decimal"
 
-the default is <size_units>="B"
+the default is <<size_units>>="B"
 
-=item [--inode-units|-i] <inode_units>
+=item [--inode-units|-i] <<inode_units>>
 
-use specified units for inode count. <inode_units> can be: ""|"k"|"M"|"G"|"T"|"P"|"E"|"Z"|"Y"|"human"
+use specified units for inode count. <<inode_units>> can be: ""|"k"|"M"|"G"|"T"|"P"|"E"|"Z"|"Y"|"human"
 
-the default is <inode_units>=""
+the default is <<inode_units>>=""
 
-=item [--time-units|-t] <time_units>
+=item [--time-units|-t] <<time_units>>
 
-use specified units for grace time. <time_units> can be: ""|"s"|"m"|"h"|"d"|"w"|"y"|"human"
+use specified units for grace time. <<time_units>> can be: ""|"s"|"m"|"h"|"d"|"w"|"y"|"human"
 
-the default is <time_units>="s"
+the default is <<time_units>>="s"
 
-=item [--format|-f] <format>
+=item [--format|-f] <<format>>
 
-specify output format. <format> can be: "json"|"csv"|"tsv"|"spacesv"
+specify output format. <<format>> can be: "json"|"csv"|"tsv"|"spacesv"
 
-=item [--column|-c] <column_header>
+=item [--column|-c] <<column_header>>
 
 select a column to include in output instead of the default of all columns 
 if none of these options are given
@@ -219,14 +233,14 @@ C<lustre_operator /usr/bin/lfs /mnt/lustre1 getquota --group group1>
 
 =head2 SYNOPSIS
 
-lustre_operator B<lfs_binary> B<lustre_filesystem> setquota 
--u|--user|-g|--group <uname>|<uid>|<gname>|<gid> [options]
+lustre_operator B<<lfs_binary>> B<<lustre_filesystem>> setquota 
+-u|--user|-g|--group <<uname>>|<<uid>>|<<gname>>|<<gid>> [options]
 
 =head2 OPTIONS
 
 =over
 
-=item -u|--user|-g|--group <uname>|<uid>|<gname>|<gid>
+=item -u|--user|-g|--group <<uname>>|<<uid>>|<<gname>>|<<gid>>
 
 Specify user or group by either name or number. 
 
@@ -236,19 +250,19 @@ Specify user or group by either name or number.
 
 =over
 
-=item [--size-softlimit|-b <size-softlimit>] 
+=item [--size-softlimit|-b <<size-softlimit>>] 
 
 =item [--force-size-softlimit]
 
-=item [--size-hardlimit|-B <size-hardlimit>]
+=item [--size-hardlimit|-B <<size-hardlimit>>]
 
 =item [--force-size-hardlimit]
 
-=item [--inode-softlimit|-i <inode-softlimit>]
+=item [--inode-softlimit|-i <<inode-softlimit>>]
 
 =item [--force-inode-softlimit]
 
-=item [--inode-hardlimit|-I <inode-hardlimit>]
+=item [--inode-hardlimit|-I <<inode-hardlimit>>]
 
 =item [--force-inode-hardlimit]
 
@@ -282,13 +296,13 @@ C<lustre_operator /usr/bin/lfs /mnt/lustre2 setquota --group group2
 
 =head2 SYNOPSIS
 
-lustre_operator B<lfs_binary> B<lustre_filesystem> find B<dir|file> [options]
+lustre_operator B<<lfs_binary>> B<<lustre_filesystem>> find B<<dir>|<file>> [options]
 
 =head2 ARGUMENTS
 
 =over
 
-=item B<dir|file>
+=item B<<dir>|<file>>
 
 Path from which to begin the recursive find.
 
@@ -306,21 +320,21 @@ Path from which to begin the recursive find.
 
 =item [--maxdepth|-D N]
 
-=item [[!] --name|-n <pattern>]
+=item [[!] --name|-n <<pattern>>]
 
 =item [--print0|-P]
 
 =item [--print|-p]
 
-=item [[!] --obd|-O <uuid[s]>]
+=item [[!] --obd|-O <<uuid[s]>>]
 
 =item [[!] --size|-s [+-]N[bkMGTP]]
 
-=item [[!] --type|-t <filetype>]
+=item [[!] --type|-t <<filetype>>]
 
-=item [[!] --gid|-g|--group|-G <gid>|<gname>]
+=item [[!] --gid|-g|--group|-G <<gid>>|<<gname>>]
 
-=item [[!] --uid|-u|--user|-U <uid>|<uname>]
+=item [[!] --uid|-u|--user|-U <<uid>>|<<uname>>]
 
 =back
 
@@ -349,50 +363,76 @@ C<lustre_operator /usr/bin/lfs /mnt/lustre3 find /mnt/lustre3/dir3 --name \*file
 =cut
 
 
-#################################################################################
-# Process command-line
-#################################################################################
-my $lfs_bin = shift or error_exit_usage("Must specify absolute path to lfs binary as first argument", "GENERAL");
-$lfs_bin = untaint_valid_abs_path($lfs_bin) or error_exit_usage("Specified lfs binary [$lfs_bin] is not an absolute path", "GENERAL");
-(-x $lfs_bin && (-f $lfs_bin || -l $lfs_bin)) or error_exit_usage("Specified lfs binary [$lfs_bin] is not executable", "GENERAL");
-
-my $lustre_filesystem = shift or error_exit_usage("Must specify lustre_filesystem as second argument", "GENERAL");
-# verify that lustre_filesystem is listed in /proc/mounts or /etc/mtab (and untaint)
-$lustre_filesystem = untaint_valid_lustre_filesystem($lustre_filesystem) or error_exit("Invalid lustre filesystem [$lustre_filesystem], must specify absolute path to lustre mount point (as listed in /proc/mounts or /etc/mtab)");
-
-my $lfs_cmd = shift or error_exit_usage("Must specify getquota, setquota, or find as third argument", "GENERAL");
-$lfs_cmd =~ m/^(getquota|setquota|find|[-]\S+)$/ or error_exit_usage("Unrecognized command: $lfs_cmd");
 
 #################################################################################
-# Launch subcommand handlers
+# run - entry point when run as a script
+# 
+# parses arguments/options and dispatches to subcommand run_* handler
+#
+# Inputs
+#    list of command-line arguments following the find command
+# Returns
+#    Nothing (never returns)
 #################################################################################
-if ($lfs_cmd eq "getquota") {
-    getquota_main($lustre_filesystem, @ARGV);
-} elsif ($lfs_cmd eq "setquota") {
-    setquota_main($lustre_filesystem, @ARGV);
-} elsif ($lfs_cmd eq "find") {
-    find_main($lustre_filesystem, @ARGV);
-} else {
-    # did not specify command, check for generic options
-    unshift @ARGV, $lfs_cmd;
-    my $help = 0;
-    GetOptions( 'help|h|?' => \$help ) or error_exit_usage("could not process generic options");
-    if ($help) {
-	pod2usage({
-	    -noperldoc => 1,
-	    -verbose => 2,
-	    -message => "Displaying full help:\n",
-	    -exitval => 0,
-	    -output => ">&STDOUT",
-		  });
+sub run {
+    my @args = @_;
+    
+    #############################################################################
+    # Process command-line
+    #############################################################################
+    my $lfs_bin = shift @args or error_exit_usage("Must specify absolute path to lfs binary as first argument", "GENERAL");
+    $lfs_bin = untaint_valid_abs_path($lfs_bin) or error_exit_usage("Specified lfs binary [$lfs_bin] is not an absolute path", "GENERAL");
+    (-x $lfs_bin && (-f $lfs_bin || -l $lfs_bin)) or error_exit_usage("Specified lfs binary [$lfs_bin] is not executable", "GENERAL");
+    
+    my $lustre_filesystem = shift @args or error_exit_usage("Must specify lustre_filesystem as second argument", "GENERAL");
+    # verify that lustre_filesystem is listed in /proc/mounts or /etc/mtab (and untaint)
+    $lustre_filesystem = untaint_valid_mount_point($lustre_filesystem) or error_exit("Invalid lustre filesystem [$lustre_filesystem], must specify absolute path to lustre mount point (as listed in /proc/mounts or /etc/mtab)");
+    
+    my $lfs_cmd = shift @args or error_exit_usage("Must specify getquota, setquota, or find as third argument", "GENERAL");
+    $lfs_cmd =~ m/^(getquota|setquota|find|[-]\S+)$/ or error_exit_usage("Unrecognized command: $lfs_cmd");
+
+    #############################################################################
+    # Launch subcommand handlers
+    #############################################################################
+    if ($lfs_cmd eq "getquota") {
+	run_getquota($lfs_bin, $lustre_filesystem,  @args);
+    } elsif ($lfs_cmd eq "setquota") {
+	run_setquota($lfs_bin, $lustre_filesystem, @args);
+    } elsif ($lfs_cmd eq "find") {
+	run_find($lfs_bin, $lustre_filesystem, @args);
+    } else {
+	# did not specify command, check for generic options
+	unshift @args, $lfs_cmd;
+	my $help = 0;
+	GetOptionsFromArray( \@args,
+			     'help|h|?' => \$help ) or error_exit_usage("could not process generic options");
+	if ($help) {
+	    pod2usage({
+		-noperldoc => 1,
+		-verbose => 2,
+		-message => "Displaying full help:\n",
+		-exitval => 0,
+		-output => ">&STDOUT",
+		      });
+	}
     }
 }
 
 
 #################################################################################
-# getquota_main subcommand handler
+# run_getquota - handle the getquota subcommand
+# 
+# parses arguments/options and handles the getquota subcommand 
+#
+# Inputs
+#    1: lfs binary
+#    2: lustre mount point
+#    remaining: list of command-line arguments following the find command
+# Returns
+#    Nothing (never returns)
 #################################################################################
-sub getquota_main {
+sub run_getquota {
+    my $lfs_bin = shift;
     my $filesystem = shift;
     my @args = @_;
 
@@ -454,21 +494,31 @@ sub getquota_main {
     # get quotas into hash
     my %quotas;
     foreach my $user (@users) {
-	$quotas{user}{$user} = lfs_get_quota($filesystem, "user", $user);
+	$quotas{user}{$user} = lfs_get_quota($lfs_bin, $filesystem, "user", $user);
     }
     foreach my $group (@groups) {
-	$quotas{group}{$group} = lfs_get_quota($filesystem, "group", $group);
+	$quotas{group}{$group} = lfs_get_quota($lfs_bin, $filesystem, "group", $group);
     }
     
     # print quotas
-    print_quotas(\%quotas, $format, $size_units, $inode_units, $time_units, \@columns);
+    output_quotas(\%quotas, $format, $size_units, $inode_units, $time_units, \@columns);
 }
 
 
 #################################################################################
-# setquota_main subcommand handler
+# run_setquota - setquota subcommand handler
+# 
+# parses arguments/options and handles the setquota subcommand 
+#
+# Inputs
+#    1: lfs binary
+#    2: lustre mount point
+#    remaining: list of command-line arguments following the find command
+# Returns
+#    Nothing (never returns)
 #################################################################################
-sub setquota_main {
+sub run_setquota {
+    my $lfs_bin = shift;
     my $filesystem = shift;
     my @args = @_;
 
@@ -537,32 +587,42 @@ sub setquota_main {
     if ( keys %checkquota > 0 ) {
 	# check the existing quota for each user and group against the new proposed quota
 	# refuse to set quota over the existing usage without a --force-* option
-	my %existingquotas;
+	my @existing_quotas;
 	foreach my $user (@users) {
-	    $existingquotas{user_$user} = lfs_get_quota($filesystem, "user", $user);
+	    push @existing_quotas, lfs_get_quota($lfs_bin, $filesystem, "user", $user);
 	}
 	foreach my $group (@groups) {
-	    $existingquotas{group_$group} = lfs_get_quota($filesystem, "group", $group);
+	    push @existing_quotas, lfs_get_quota($lfs_bin, $filesystem, "group", $group);
 	}
 	
 	# check proposed quotas against existing usage (error_exit if change would put any user/group over)
-	check_quota_change(\%existingquotas, \%checkquota);
+	check_quota_change(\@existing_quotas, \%checkquota);
     }
     
     # set quota for each user and group
     foreach my $user (@users) {
-	lfs_set_quota($filesystem, "user", $user, \%newquota);
+	lfs_set_quota($lfs_bin, $filesystem, "user", $user, \%newquota);
     }
     foreach my $group (@groups) {
-	lfs_set_quota($filesystem, "group", $group, \%newquota);
+	lfs_set_quota($lfs_bin, $filesystem, "group", $group, \%newquota);
     }
 }
 
 
 #################################################################################
-# find_main subcommand handler
+# run_find - find subcommand handler
+# 
+# parses arguments/options and handles the find subcommand 
+#
+# Inputs
+#    1: lfs binary
+#    2: lustre mount point
+#    remaining: list of command-line arguments following the find command
+# Returns
+#    Nothing (never returns)
 #################################################################################
-sub find_main {
+sub run_find {
+    my $lfs_bin = shift;
     my $filesystem = shift;
     my @args = @_;
 
@@ -646,13 +706,198 @@ sub find_main {
 	$arg = shift @args;
     }
     # exec to run lfs find (never to return)
-    exec_lfs(@lfs_args);
+    exec_lfs($lfs_bin, @lfs_args);
     error_exit("unexpected error in exec_lfs find");
 }
 
+#################################################################################
+# untaint_valid_mount_point - return untainted mount point if it is valid
+# 
+# verifies the given mount point is specified as an absolute path, then 
+# checks if mount point is valid by looking it up in /proc/mounts or /etc/mtab
+#
+# Inputs
+#    1: mount point
+# Returns
+#    untainted mount point or undef if not valid
+#################################################################################
+sub untaint_valid_mount_point {
+    my $mount_point = shift;
+    my $validated_filesystem = undef;
+
+    if ( valid_abs_path($mount_point) ) {
+	# have valid path based on regex, check for it in /proc/mounts or /etc/mtab
+	my $mfile = "/proc/mounts";
+	if (! open MOUNTS, "<$mfile" ) {
+	    $mfile = "/etc/mtab";
+	    open MOUNTS, "<$mfile" or error_exit("could not open /proc/mounts or /etc/mtab for reading");
+	}
+	MOUNTLINE: while( my $mountline = <MOUNTS> ) {
+	    chomp $mountline;
+	    my ($spec, $mountpoint, $type, undef) = split /\s+/, $mountline, 4;
+	    if ($mountpoint eq $mount_point) {
+		if ($type eq "lustre") {
+		    # validated, untaint
+		    $mountpoint =~ m/^(\/.*)$/ or error_exit("did not have absolute path as mount point: $mountpoint");
+		    $validated_filesystem = $1;
+		    last MOUNTLINE;
+		} else {
+		    error_exit("$mount_point was listed in $mfile but was not of type lustre");
+		}
+	    }
+	}
+	close MOUNTS;
+    }
+    return $validated_filesystem;
+}
 
 #################################################################################
-# exec_lfs - call the lfs binary in the global variable $lfs_bin 
+# untaint_valid_abs_path - return untainted absolute path if it appears valid
+# 
+# Inputs
+#    1: absolute path
+# Returns
+#    untainted absolute path or undef if not valid
+#################################################################################
+sub untaint_valid_abs_path {
+    my $filepath = shift;
+    if (valid_abs_path($filepath)) {
+	$filepath =~ m/^(\/.*)$/;
+	$filepath = $1;
+	return $filepath;
+    } else {
+	return undef;
+    }
+}
+
+#################################################################################
+# valid_abs_path - check if a path is absolute and plausibly valid
+# 
+# Inputs
+#    1: absolute path
+# Returns
+#    1 if valid, undef if not
+#################################################################################
+sub valid_abs_path {
+    my $filepath = shift;
+    ($filepath =~ /^\//) and valid_path($filepath) ? 1 : undef;
+}
+
+#################################################################################
+# valid_path - check if a path is plausibly valid (contains no illegal characters)
+# 
+# Inputs
+#    1: path
+# Returns
+#    1 if valid, undef if not
+#################################################################################
+sub valid_path {
+    my $filepath = shift;
+    $filepath !~ /$ILLEGAL_PATH_REGEX/ ? 1 : undef;
+}
+
+#################################################################################
+# over_quota - check if usage is over quota (handling unlimited quotas)
+# 
+# Inputs
+#    1: quota value
+#    2: used value
+# Returns
+#    1 if over quota, undef if not
+#################################################################################
+sub over_quota {
+    my $quota = shift || $NO_QUOTA;
+    my $used = shift or error_exit("over_quota called without used value");
+
+    $quota =~ m/^($NO_QUOTA|[0-9]+)$/ or error_exit("quota [$quota] was neither $NO_QUOTA nor an integer");
+
+    if (($quota eq $NO_QUOTA) ||
+	($quota >= $used)) {
+	# not over quota
+	return undef;
+    } 
+    
+    # over quota
+    return 1;
+}
+
+#################################################################################
+# error_exit - print message to STDERR and exit with error
+# 
+# Inputs
+#    1: message to print to STDERR
+# Returns
+#    Nothing (never returns)
+#################################################################################
+sub error_exit {
+    my $message = shift;
+    die "Error: $message\n";
+}
+
+#################################################################################
+# error_exit_usage - print message and usage to STDERR,  and exit with error (1)
+# 
+# Inputs
+#    1: message to print to STDERR
+#    2: command whose usage should be printed
+# Returns
+#    Nothing (never returns)
+#################################################################################
+sub error_exit_usage {
+    my $message = shift;
+    my $command = shift || "";
+    
+    my $sections = [ qw(SYNOPSIS ARGUMENTS OPTIONS) ];
+    if ($command ne "") {
+	$sections = [ "$command/SYNOPSIS", "$command/ARGUMENTS", "$command/OPTIONS" ];
+    }
+    
+    pod2usage({
+	-noperldoc => 1,
+	-message => "Error: $message\n",
+	-exitval => 1,
+	-output => ">&STDERR",
+	-verbose => 99,
+	-sections => $sections,
+	      });
+
+    # this should not be reached, but call it in case something goes wrong with pod2usage
+    error_exit($message);
+}
+
+#################################################################################
+# exit_usage - print message to STDOUT, print usage, and exit successfully
+# 
+# Inputs
+#    1: message to print to STDOUT
+#    2: command whose usage should be printed
+# Returns
+#    Nothing (never returns)
+#################################################################################
+sub exit_usage {
+    my $message = shift;
+    my $command = shift || "";
+    
+    my $sections = [ qw(SYNOPSIS ARGUMENTS OPTIONS) ];
+    if ($command ne "") {
+	$sections = [ "$command/SYNOPSIS", "$command/ARGUMENTS", "$command/OPTIONS" ];
+    }
+    
+    pod2usage({
+	-noperldoc => 1,
+	-message => "$message\n",
+	-exitval => 0,
+	-output => ">&STDOUT",
+	-verbose => 99,
+	-sections => $sections,
+	      });
+
+    # this should not be reached, but call it in case something goes wrong with pod2usage
+    error_exit($message);
+}
+
+#################################################################################
+# exec_lfs - call the lfs binary 
 # 
 # all calls to external lfs binary should go through this subroutine.
 # it completely drops the environment before exec'ing and uses the multiple-
@@ -661,11 +906,13 @@ sub find_main {
 # exits with an error)
 # 
 # Inputs
-#    1: array of lfs command line args
+#    1: path to lfs binary
+#    2: array of lfs command line args
 # Returns
 #    Nothing (never returns)
 #################################################################################
 sub exec_lfs {
+    my $lfs_bin = shift;
     my @lfs_args = @_;
 
     # completely squash environment before exec
@@ -685,11 +932,13 @@ sub exec_lfs {
 # from the command.
 # 
 # Inputs
-#    1: array of lfs command line args
+#    1: path to lfs binary
+#    2: array of lfs command line args
 # Returns
 #    Filehandle to read from STDOUT of the lfs command
 #################################################################################
 sub exec_lfs_pipe_open {
+    my $lfs_bin = shift;
     my @lfs_args = @_;
     
     # this code adapted from "safe pipe open for reading" 
@@ -700,7 +949,7 @@ sub exec_lfs_pipe_open {
     
     if (!$pid) { # $pid is only set in parent
 	# child, call exec and never return (exec_lfs will exit on error)
-	exec_lfs(@lfs_args);
+	exec_lfs($lfs_bin, @lfs_args);
 	
 	# as a safety precaution, force child to exit (this should never be reached)
 	error_exit("child process attempted to continue after exec_lfs");
@@ -736,16 +985,18 @@ sub exec_lfs_pipe_open {
 # "timestamp" (timestamp in ISO8601 format)
 # 
 # Inputs
-#    1: lustre filesystem
-#    2: "user"|"group"
-#    3: <user_name>|<group_name>
+#    1: path to lfs binary
+#    2: lustre filesystem
+#    3: "user"|"group"
+#    4: <user_name>|<group_name>
 # Returns
 #    Hashref to quota with units in Bytes (not kB), inodes, and seconds
 #################################################################################
 sub lfs_get_quota {
-    my $filesystem = shift; # 1: lustre filesystem mount point
-    my $quota_type = shift; # 2: "user" or "group"
-    my $quota_name = shift; # 3: user or group name
+    my $lfs_bin = shift;    # 1: path to lfs binary
+    my $filesystem = shift; # 2: lustre filesystem mount point
+    my $quota_type = shift; # 3: "user" or "group"
+    my $quota_name = shift; # 4: user or group name
 
     # validate arguments and untaint
     valid_abs_path($filesystem) or error_exit("get_quota: filesystem $filesystem not valid");
@@ -756,9 +1007,9 @@ sub lfs_get_quota {
     
     my $lfs_quota_out_fh;
     if ($quota_type eq "user") {
-	$lfs_quota_out_fh = exec_lfs_pipe_open("quota", "-u", $quota_name, $filesystem);
+	$lfs_quota_out_fh = exec_lfs_pipe_open($lfs_bin, "quota", "-u", $quota_name, $filesystem);
     } elsif ($quota_type eq "group") {
-	$lfs_quota_out_fh = exec_lfs_pipe_open("quota", "-g", $quota_name, $filesystem);
+	$lfs_quota_out_fh = exec_lfs_pipe_open($lfs_bin, "quota", "-g", $quota_name, $filesystem);
     } else {
 	error_exit("unexpected value for quota type: $quota_type");
     
@@ -816,16 +1067,16 @@ sub lfs_get_quota {
                         \s*
                         $/x or error_exit("unexpected data in output from lfs quota for $filesystem $quota_type $quota_name: [$quotaline]");
     # post-process into standard units (bytes, inodes, seconds)
-    $quota{"size-used"} = lfs_blocks_to_bytes($1);
+    $quota{"size-used"} = lfs_blocks_used_to_bytes($1);
     $quota{"size-overquota"} = $2;
-    $quota{"size-softlimit"} = lfs_blocks_to_bytes(lfs_process_block_limit($3));
-    $quota{"size-hardlimit"} = lfs_blocks_to_bytes(lfs_process_block_limit($4));
-    $quota{"size-grace"} = lfs_grace_to_seconds(lfs_process_grace_time($5));
+    $quota{"size-softlimit"} = lfs_block_limit_to_bytes($3);
+    $quota{"size-hardlimit"} = lfs_block_limit_to_bytes($4);
+    $quota{"size-grace"} = lfs_grace_time_to_seconds($5);
     $quota{"inode-used"} = $6; 
     $quota{"inode-overquota"} = $7;
     $quota{"inode-softlimit"} = lfs_process_inode_limit($8);
     $quota{"inode-hardlimit"} = lfs_process_inode_limit($9);
-    $quota{"inode-grace"} = lfs_grace_to_seconds(lfs_process_grace_time($10));
+    $quota{"inode-grace"} = lfs_grace_time_to_seconds($10);
     
     # record timestamp along with the data
     $quota{"timestamp"} = DateTime->now()->iso8601();
@@ -851,19 +1102,21 @@ sub lfs_get_quota {
 #################################################################################
 # lfs_set_quota - sets quota for a user or group and returns on success
 # Inputs
-#    1: lustre filesystem
-#    2: "user"|"group"
-#    3: <user_name>|<group_name>
-#    4: hashref to quota hash containing at least one of:
+#    1: path to lfs binary
+#    2: lustre filesystem
+#    3: "user"|"group"
+#    4: <user_name>|<group_name>
+#    5: hashref to quota hash containing at least one of:
 #       "size-hardlimit", "size-softlimit", "inode-hardlimit", "inode-softlimit"
 # Returns
 #    1 on success, undef on failure
 #################################################################################
 sub lfs_set_quota {
-    my $filesystem = shift; # 1: lustre filesysteam
-    my $quota_type = shift; # 2: "user" or "group"
-    my $quota_name = shift; # 3: user or group name
-    my $new_quota = shift;   # 4: hashref for quota to set
+    my $lfs_bin = shift;    # 1: path to lfs binary
+    my $filesystem = shift; # 2: lustre filesysteam
+    my $quota_type = shift; # 3: "user" or "group"
+    my $quota_name = shift; # 4: user or group name
+    my $new_quota = shift;  # 5: hashref for quota to set
 
     my @lfs_args;
     push @lfs_args, "setquota";
@@ -891,31 +1144,131 @@ sub lfs_set_quota {
 	push @lfs_args, "--inode-hardlimit", $new_quota->{"inode-hardlimit"};
     }
     push @lfs_args, $filesystem;
-    my $lfs_setquota_out_fh = exec_lfs_pipe_open(@lfs_args);
+    my $lfs_setquota_out_fh = exec_lfs_pipe_open($lfs_bin, @lfs_args);
     
     close($lfs_setquota_out_fh) or error_exit("lfs setquota failed for $filesystem $quota_type $quota_name");
     return (($?>>8) ? undef : 1);
 }
 
+#################################################################################
+# lfs_process_inode_limit - process inode limits reported by lfs command
+# 
+# Inputs
+#    1: inode count as output by lfs command
+# Returns
+#    inode count or $NO_QUOTA if unlimited
+#################################################################################
+sub lfs_process_inode_limit {
+    my $inode_count = shift;
+    
+    if ($inode_count =~ m/^$LFS_QUOTA_INODE_UNLIMITED$/) {
+        return $NO_QUOTA;
+    } else {
+	return $inode_count;
+    }
+}
 
+#################################################################################
+# lfs_block_limit_to_bytes - convert block limit reported by lfs command to bytes
+# 
+# Inputs
+#    1: block limit as output by lfs command
+# Returns
+#    limit in bytes or $NO_QUOTA if unlimited
+#################################################################################
+sub lfs_block_limit_to_bytes {
+    my $blocks = shift;
+    my $bytes = 0;
+
+    if ($blocks =~ m/^$LFS_QUOTA_SIZE_UNLIMITED$/) {
+	$bytes = $NO_QUOTA;
+    } else {
+	$bytes = $blocks * $LFS_BLOCKSIZE;
+    }
+    
+    return $bytes;
+}
+
+#################################################################################
+# lfs_blocks_used_to_bytes - convert blocks used reported by lfs command to bytes
+# 
+# Inputs
+#    1: blocks used as output by lfs command
+# Returns
+#    bytes used or $NO_QUOTA if unlimited
+#################################################################################
+sub lfs_blocks_used_to_bytes {
+    my $blocks = shift;
+    
+    return ($blocks * $LFS_BLOCKSIZE);
+}
+
+#################################################################################
+# lfs_grace_time_to_seconds - convert grace time reported by lfs command to sec.
+# 
+# Inputs
+#    1: grace time as output by lfs command
+# Returns
+#    grace time in seconds or $NO_QUOTA if unlimited
+#################################################################################
+sub lfs_grace_time_to_seconds {
+    my $gracetime = shift;
+    my $seconds = 0;
+    
+    # gracetime can be in seconds already or can be something like: "6d23h59m50s"
+    if ($gracetime =~ m/^$LFS_GRACE_INACTIVE$/) {
+	$seconds = $TIMER_INACTIVE;
+    } elsif ($gracetime =~ m/[dhms]/) {
+	# process in d h m s format
+	$gracetime =~ m/^([0-9]*)d?([0-9]*)h?([0-9]*)m?([0-9]*)s?/ or error_exit("lfs_process_grace_to_seconds: could not process gracetime: $gracetime");
+    } elsif ($gracetime =~ m/^[0-9]+$/) {
+	# process as s
+	$seconds = $gracetime;
+    }
+    return $seconds;
+}
+
+#################################################################################
+# check_quota_change - checks whether new quota would put old quota(s) over quota 
+# that were not previously over quota
+# 
+# Inputs
+#    1: ref to array of hashes of old quotas
+#    2: ref to hash of new quota limits to check
+# Returns
+#    1 on success, exits process on failure
+#################################################################################
 sub check_quota_change {
     my $old_quotas = shift;
     my $new_quota = shift;
     
-    foreach my $ug_key (keys %${old_quotas}) {
+    foreach my $old_quota (@{$old_quotas}) {
 	foreach my $limit_key (keys %{$new_quota}) {
 	    $limit_key =~ m/^(size|inode)-(softlimit|hardlimit)$/ or error_exit("check_quota_change unrecognised limit $limit_key");
 	    my $used_key = $1."-used";
-	    if ( !over_quota($old_quotas->{$ug_key}{$limit_key}, $old_quotas->{$ug_key}{$used_key}) &&
-		 over_quota($new_quota->{$limit_key}, $old_quotas->{$ug_key}{$used_key})) {
-		error_exit($old_quotas->{$ug_key}{"type"}." ".$old_quotas->{$ug_key}{"name"}." is not currently over ".$limit_key." quota but new quota would put it over quota: refusing without --force-".$limit_key);
+	    if ( !over_quota($old_quota->{$limit_key}, $old_quota->{$used_key}) &&
+		 over_quota($new_quota->{$limit_key}, $old_quota->{$used_key})) {
+		error_exit($old_quota->{"type"}." ".$old_quota->{"name"}." is not currently over ".$limit_key." quota but new quota would put it over quota: refusing without --force-".$limit_key);
 	    }
 	}
     }
+    return 1;
 }
 
-
-sub print_quotas {
+#################################################################################
+# output_quotas - print quotas (or subset of quota) in specified format and units
+# 
+# Inputs
+#    1: ref to array of hashes of quotas to print
+#    2: format ("json", "csv", "tsv", "spacesv")
+#    3: size units
+#    4: inode units
+#    5: time units
+#    6: ref to array of columns to include (if not specified, include all)
+# Returns
+#    1 on success, exits process on failure
+#################################################################################
+sub output_quotas {
     my $quotas = shift;
     my $format = shift || "tsv";
     my $size_units = shift; 
@@ -927,8 +1280,8 @@ sub print_quotas {
     foreach my $type (keys %{$quotas}) {
 	foreach my $name (keys %{$quotas->{$type}}) {
 	    my $quota = $quotas->{$type}->{$name};
-	    error_exit("print_quotas: type did not match for $type/$name") unless $quota->{"type"} eq $type;
-	    error_exit("print_quotas: name did not match for $type/$name") unless $quota->{"name"} eq $name;
+	    error_exit("output_quotas: type did not match for $type/$name") unless $quota->{"type"} eq $type;
+	    error_exit("output_quotas: name did not match for $type/$name") unless $quota->{"name"} eq $name;
 	    foreach my $key (keys %{$quota}) {
 		if ($key =~ m/^size-(used|softlimit|hardlimit|remaining)$/ && $quota->{$key} =~ m/^[0-9]+$/) {
 		    $unitquotas->{$type}{$name}{$key} = convert_bytes($quota->{$key}, $size_units);
@@ -954,51 +1307,169 @@ sub print_quotas {
 		}
 	    }
 	} else {
+	    # include all columns in json output
 	    $jsonquotas = $unitquotas;
 	}
-	print_quotas_json($jsonquotas);
+	output_quotas_json($jsonquotas);
     } elsif (lc($format) =~ m/^(tsv|csv|spacesv)/) {
+	my $field_sep = "\t";
+	if ($format eq "csv") {
+	    $field_sep = ",";
+	} elsif ($format eq "spacesv") {
+	    $field_sep = " ";
+	}
 	my $tablefmt = $1;
 	if (@{$columns} > 0) {
-	    print_quotas_table($unitquotas, $columns, $tablefmt);
+	    output_quotas_table($unitquotas, $columns, $field_sep, "\n");
 	} else {
-	    print_quotas_table($unitquotas, $COLUMN_ORDER, $tablefmt);
+	    output_quotas_table($unitquotas, $COLUMN_ORDER, $field_sep, "\n");
 	}
     } else {
 	error_exit("unsupported output format $format");
     }
+    return 1;
 }
 
-sub print_quotas_json {
+#################################################################################
+# output_quotas_json - print quotas array as JSON
+# 
+# Inputs
+#    1: ref to array of hashes of quotas to print
+# Returns
+#    1 on success, exits process on failure
+#################################################################################
+sub output_quotas_json {
     my $quotas = shift;
-    print JSON::XS->new->pretty(1)->encode($quotas)."\n";
+    print JSON::XS->new->pretty(1)->encode($quotas)."\n" or error_exit("output_quotas_json could not encode JSON: $!");
+    return 1;
 }
 
-sub print_quotas_table {
+#################################################################################
+# output_quotas_table - print quotas array as table with given field and row seps
+# 
+# Inputs
+#    1: ref to array of hashes of quotas to print
+#    2: ref to array of columns to print 
+#    3: field separator (optional: default "\t")
+#    4: row separator (optional: default "\n")
+# Returns
+#    1 on success, exits process on failure
+#################################################################################
+sub output_quotas_table {
     my $quotas = shift;
     my $columns = shift;
-    my $format = shift;
+    my $field_sep = shift || "\t";
+    my $row_sep = shift || "\n";
 
-    ($format =~ m/^(csv|tsv|spacesv)$/) or error_exit("print_quotas_table $format not supported");
-    my $sep = "\t";
-    if ($format eq "csv") {
-	$sep = ",";
-    } elsif ($format eq "spacesv") {
-	$sep = " ";
-    }
-    
-    print join($sep, @{$columns})."\n";
+    print join($field_sep, @{$columns}).$row_sep;
     foreach my $type (keys %{$quotas}) {
 	foreach my $name (keys %{$quotas->{$type}}) {
 	    my $quota = $quotas->{$type}->{$name};
-	    error_exit("print_quotas: type did not match for $type/$name") unless $quota->{"type"} eq $type;
-	    error_exit("print_quotas: name did not match for $type/$name") unless $quota->{"name"} eq $name;
-	    print join($sep, map {$quota->{$_}} @{$columns})."\n";
+	    error_exit("output_quotas: type did not match for $type/$name") unless $quota->{"type"} eq $type;
+	    error_exit("output_quotas: name did not match for $type/$name") unless $quota->{"name"} eq $name;
+	    print join($field_sep, map {$quota->{$_}} @{$columns}).$row_sep;
 	}
     }
 }
 
-sub human_bytes_format {
+#################################################################################
+# convert_bytes - convert bytes to formatted units
+# 
+# Inputs
+#    1: bytes
+#    2: units
+# Returns
+#    formatted string including units
+#################################################################################
+sub convert_bytes {
+    my $bytes = shift;
+    my $units = shift || "";
+    if ( (!$units) || $units eq 'B') {
+	return $bytes.$OUTPUT_UNIT_SEP.$units;
+    } elsif ($units eq 'human_binary') {
+	return convert_bytes_human($bytes, 0);
+    } elsif ($units eq 'human_decimal') {
+	return convert_bytes_human($bytes, 1);
+    } elsif ($units ne 'B') {
+	# fixed unit specification requiring conversion
+	for (my $i=1; $i<@{$BINARY_UNIT_LABELS}; $i++) {
+	    if ($BINARY_UNIT_LABELS->[$i] eq $units) {
+		return sprintf("%.1f%s%s", ($bytes / (1024 ** $i)), $OUTPUT_UNIT_SEP, $units);
+	    }
+	    if ($DECIMAL_UNIT_LABELS->[$i] eq $units) {
+		return sprintf("%.1f%s%s", ($bytes / (1000 ** $i)), $OUTPUT_UNIT_SEP, $units);
+	    }
+	}
+    }
+    error_exit("unknown size units [$units]. specify one of: ".join(', ', @{$BINARY_UNIT_LABELS}, @{$DECIMAL_UNIT_LABELS}, 'human_binary', 'human_decimal'));
+}
+
+#################################################################################
+# convert_inodes - convert inode count to formatted units
+# 
+# Inputs
+#    1: inode count
+#    2: units
+# Returns
+#    formatted string including units
+#################################################################################
+sub convert_inodes {
+    my $inodes = shift;
+    my $units = shift;
+    if (!$units) {
+	return $inodes;
+    } else {
+	if ($units eq 'human') {
+	    return convert_inodes_human($inodes);
+	} else {
+	    # fixed unit specification
+	    for (my $i=1; $i<@{$DECIMAL_PREFIXES}; $i++) {
+		if ($DECIMAL_PREFIXES->[$i] eq $units) { 
+		    return sprintf("%.1f%s%s", ($inodes / (1024 ** $i)), $OUTPUT_UNIT_SEP, $units);
+		}
+	    }
+	}
+	error_exit("unknown inode units [$units]. specify one of: ".join(', ', @{$DECIMAL_PREFIXES}, 'human'));
+    } 
+} 
+
+#################################################################################
+# convert_seconds - convert seconds to formatted units
+# 
+# Inputs
+#    1: seconds
+#    2: units
+# Returns
+#    formatted string including units
+#################################################################################
+sub convert_seconds {
+    my $gracetime = shift;
+    my $units = shift;
+    if ( (!$units) || $units eq 's') {
+	return $gracetime.$OUTPUT_UNIT_SEP.$units;
+    } elsif ($units eq 'human') {
+	return convert_seconds_human($gracetime);
+    } else {
+	# fixed unit specification
+	for (my $i=1; $i<@{$TIME_UNIT_LABELS}; $i++) {
+	    if ($TIME_UNIT_LABELS->[$i] eq $units) {
+		return sprintf("%.1f%s%s", ($gracetime / $TIME_UNIT_RATIOS->[$i]), $OUTPUT_UNIT_SEP, $units);
+	    }
+	}
+    }
+    error_exit("unknown gracetime units [$units]. specify one of: ".join(', ', @{$TIME_UNIT_LABELS}, 'human'));
+} 
+
+#################################################################################
+# convert_bytes_human - convert bytes to human-readable units
+# 
+# Inputs
+#    1: bytes
+#    2: "1" for decimal units ("kB","MB",etc), "0" for binary units ("KiB","MiB",etc)
+# Returns
+#    formatted string including units
+#################################################################################
+sub convert_bytes_human {
     my $bytes = shift;
     my $decimal = shift;
     
@@ -1022,7 +1493,15 @@ sub human_bytes_format {
     return sprintf("%.1f%s%s", $bytes / ($base ** $unit_index), $OUTPUT_UNIT_SEP, $labels[$unit_index]);
 }
 
-sub human_inode_format {
+#################################################################################
+# convert_inodes_human - convert inode count to human-readable units
+# 
+# Inputs
+#    1: inode count
+# Returns
+#    formatted string including units
+#################################################################################
+sub convert_inodes_human {
     my $count = shift;
     
     my $base = 1000;
@@ -1041,7 +1520,15 @@ sub human_inode_format {
     return sprintf("%.1f%s%s", $count / ($base ** $unit_index), $OUTPUT_UNIT_SEP, $labels[$unit_index]);
 }
 
-sub human_time_format {
+#################################################################################
+# convert_seconds_human - convert seconds to human-readable units
+# 
+# Inputs
+#    1: time in seconds 
+# Returns
+#    formatted string including units
+#################################################################################
+sub convert_seconds_human {
     my $seconds = shift;
     
     my $result = "";
@@ -1060,243 +1547,6 @@ sub human_time_format {
 
     return $result;
 }
-
-sub untaint_valid_lustre_filesystem {
-    my $lustre_filesystem = shift;
-    my $validated_filesystem = undef;
-
-    if ( valid_abs_path($lustre_filesystem) ) {
-	# have valid path based on regex, check for it in /proc/mounts or /etc/mtab
-	my $mfile = "/proc/mounts";
-	if (! open MOUNTS, "<$mfile" ) {
-	    $mfile = "/etc/mtab";
-	    open MOUNTS, "<$mfile" or error_exit("could not open /proc/mounts or /etc/mtab for reading");
-	}
-	MOUNTLINE: while( my $mountline = <MOUNTS> ) {
-	    chomp $mountline;
-	    my ($spec, $mountpoint, $type, undef) = split /\s+/, $mountline, 4;
-	    if ($mountpoint eq $lustre_filesystem) {
-		if ($type eq "lustre") {
-		    # validated, untaint
-		    $mountpoint =~ m/^(\/.*)$/ or error_exit("did not have absolute path as mount point: $mountpoint");
-		    $validated_filesystem = $1;
-		    last MOUNTLINE;
-		} else {
-		    error_exit("$lustre_filesystem was listed in $mfile but was not of type lustre");
-		}
-	    }
-	}
-	close MOUNTS;
-    }
-    return $validated_filesystem;
-}
-
-sub untaint_valid_abs_path {
-    my $filepath = shift;
-    if (valid_abs_path($filepath)) {
-	$filepath =~ m/^(\/.*)$/;
-	$filepath = $1;
-	return $filepath;
-    } else {
-	return undef;
-    }
-}
-
-sub valid_abs_path {
-    my $filepath = shift;
-    ($filepath =~ /^\//) and valid_path($filepath) ? 1 : undef;
-}
-
-sub valid_path {
-    my $filepath = shift;
-    $filepath !~ /$ILLEGAL_PATH_REGEX/ ? 1 : undef;
-}
-
-sub over_quota {
-    my $quota = shift || $NO_QUOTA;
-    my $used = shift or error_exit("over_quota called without used value");
-
-    $quota =~ m/^($NO_QUOTA|[0-9]+)$/ or error_exit("quota [$quota] was neither $NO_QUOTA nor an integer");
-
-    if (($quota eq $NO_QUOTA) ||
-	($quota >= $used)) {
-	# not over quota
-	return undef;
-    } 
-    
-    # over quota
-    return 1;
-}
-
-sub error_exit {
-    my $message = shift;
-    die "Error: $message\n";
-}
-
-sub error_exit_usage {
-    my $message = shift;
-    my $command = shift || "";
-    
-    my $sections = [ qw(SYNOPSIS ARGUMENTS OPTIONS) ];
-    if ($command ne "") {
-	$sections = [ "$command/SYNOPSIS", "$command/ARGUMENTS", "$command/OPTIONS" ];
-    }
-    
-    pod2usage({
-	-noperldoc => 1,
-	-message => "Error: $message\n",
-	-exitval => 1,
-	-output => ">&STDERR",
-	-verbose => 99,
-	-sections => $sections,
-	      });
-
-    # this should not be reached, but call it in case something goes wrong with pod2usage
-    error_exit($message);
-}
-
-sub exit_usage {
-    my $message = shift;
-    my $command = shift || "";
-    
-    my $sections = [ qw(SYNOPSIS ARGUMENTS OPTIONS) ];
-    if ($command ne "") {
-	$sections = [ "$command/SYNOPSIS", "$command/ARGUMENTS", "$command/OPTIONS" ];
-    }
-    
-    pod2usage({
-	-noperldoc => 1,
-	-message => "$message\n",
-	-exitval => 0,
-	-output => ">&STDOUT",
-	-verbose => 99,
-	-sections => $sections,
-	      });
-
-    # this should not be reached, but call it in case something goes wrong with pod2usage
-    error_exit($message);
-}
-
-sub lfs_process_block_limit {
-    my $blocks = shift;
-    
-    if ($blocks =~ m/^$LFS_QUOTA_SIZE_UNLIMITED$/) {
-	return $NO_QUOTA;
-    } else {
-	return $blocks;
-    }
-}
-
-sub lfs_process_inode_limit {
-    my $inode_count = shift;
-    
-    if ($inode_count =~ m/^$LFS_QUOTA_INODE_UNLIMITED$/) {
-        return $NO_QUOTA;
-    } else {
-	return $inode_count;
-    }
-}
-
-sub lfs_process_grace_time {
-    my $gracetime = shift;
-    
-    if ($gracetime =~ m/^$LFS_GRACE_INACTIVE$/) {
-	return $TIMER_INACTIVE;
-    } else {
-	return $gracetime;
-    }
-}
-
-sub lfs_blocks_to_bytes {
-    my $blocks = shift;
-    my $bytes = 0;
-    
-    if ($blocks =~ m/^$NO_QUOTA$/) {
-	$bytes = $NO_QUOTA;
-    } else {
-	$bytes = $blocks * $LFS_BLOCKSIZE;
-    }
-    
-    return $bytes;
-}
-
-sub lfs_grace_to_seconds {
-    my $gracetime = shift;
-    my $seconds = 0;
-    
-    # gracetime can be in seconds already or can be something like: "6d23h59m50s"
-    if ($gracetime =~ m/^$TIMER_INACTIVE$/) {
-	$seconds = $TIMER_INACTIVE;
-    } elsif ($gracetime =~ m/[dhms]/) {
-	# process in d h m s format
-	$gracetime =~ m/^([0-9]*)d?([0-9]*)h?([0-9]*)m?([0-9]*)s?/ or error_exit("lfs_process_grace_to_seconds: could not process gracetime: $gracetime");
-    } elsif ($gracetime =~ m/^[0-9]+$/) {
-	# process as s
-	$seconds = $gracetime;
-    }
-    return $seconds;
-}
-
-sub convert_bytes {
-    my $bytes = shift;
-    my $units = shift || "";
-    if ( (!$units) || $units eq 'B') {
-	return $bytes.$OUTPUT_UNIT_SEP.$units;
-    } elsif ($units eq 'human_binary') {
-	return human_bytes_format($bytes, 0);
-    } elsif ($units eq 'human_decimal') {
-	return human_bytes_format($bytes, 1);
-    } elsif ($units ne 'B') {
-	# fixed unit specification requiring conversion
-	for (my $i=1; $i<@{$BINARY_UNIT_LABELS}; $i++) {
-	    if ($BINARY_UNIT_LABELS->[$i] eq $units) {
-		return sprintf("%.1f%s%s", ($bytes / (1024 ** $i)), $OUTPUT_UNIT_SEP, $units);
-	    }
-	    if ($DECIMAL_UNIT_LABELS->[$i] eq $units) {
-		return sprintf("%.1f%s%s", ($bytes / (1000 ** $i)), $OUTPUT_UNIT_SEP, $units);
-	    }
-	}
-    }
-    error_exit("unknown size units [$units]. specify one of: ".join(', ', @{$BINARY_UNIT_LABELS}, @{$DECIMAL_UNIT_LABELS}, 'human_binary', 'human_decimal'));
-}
-
-sub convert_inodes {
-    my $inodes = shift;
-    my $units = shift;
-    if (!$units) {
-	return $inodes;
-    } else {
-	if ($units eq 'human') {
-	    return human_inode_format($inodes);
-	} else {
-	    # fixed unit specification
-	    for (my $i=1; $i<@{$DECIMAL_PREFIXES}; $i++) {
-		if ($DECIMAL_PREFIXES->[$i] eq $units) { 
-		    return sprintf("%.1f%s%s", ($inodes / (1024 ** $i)), $OUTPUT_UNIT_SEP, $units);
-		}
-	    }
-	}
-	error_exit("unknown inode units [$units]. specify one of: ".join(', ', @{$DECIMAL_PREFIXES}, 'human'));
-    } 
-} 
-
-sub convert_seconds {
-    my $gracetime = shift;
-    my $units = shift;
-    if ( (!$units) || $units eq 's') {
-	return $gracetime.$OUTPUT_UNIT_SEP.$units;
-    } elsif ($units eq 'human') {
-	return human_time_format($gracetime);
-    } else {
-	# fixed unit specification
-	for (my $i=1; $i<@{$TIME_UNIT_LABELS}; $i++) {
-	    if ($TIME_UNIT_LABELS->[$i] eq $units) {
-		return sprintf("%.1f%s%s", ($gracetime / $TIME_UNIT_RATIOS->[$i]), $OUTPUT_UNIT_SEP, $units);
-	    }
-	}
-    }
-    error_exit("unknown gracetime units [$units]. specify one of: ".join(', ', @{$TIME_UNIT_LABELS}, 'human'));
-} 
 
 
 __END__
