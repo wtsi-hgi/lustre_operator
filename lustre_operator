@@ -1379,7 +1379,10 @@ sub output_quotas_json {
 #################################################################################
 sub output_quotas_dumper {
     my $quotas = shift;
-    print Dumper($quotas)."\n" or error_exit("output_quotas_dumper could not output quotas: $!");
+    my $dumper = Data::Dumper->new([]);
+    $dumper->Terse(1);
+    $dumper->Values([$quotas]);
+    print $dumper->Dump()."\n" or error_exit("output_quotas_dumper could not output quotas: $!");
     return 1;
 }
 
