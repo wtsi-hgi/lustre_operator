@@ -380,13 +380,17 @@ sub run {
     #############################################################################
     # Process command-line
     #############################################################################
-    my $lfs_bin = shift @args or error_exit_usage("Must specify absolute path to lfs binary as first argument", "GENERAL");
-    $lfs_bin = untaint_valid_abs_path($lfs_bin) or error_exit_usage("Specified lfs binary [$lfs_bin] is not an absolute path", "GENERAL");
+    if ($args[0] =~ m/(--help|-h)/) {
+	# shortcut to full help (and exit)
+	exit_full_help();
+    }
+    my $lfs_bin_taint = shift @args or error_exit_usage("Must specify absolute path to lfs binary as first argument", "GENERAL");
+    my $lfs_bin = untaint_valid_abs_path($lfs_bin_taint) or error_exit_usage("Specified lfs binary [$lfs_bin_taint] is not a valid absolute path", "GENERAL");
     (-x $lfs_bin && (-f $lfs_bin || -l $lfs_bin)) or error_exit_usage("Specified lfs binary [$lfs_bin] is not executable", "GENERAL");
     
-    my $lustre_filesystem = shift @args or error_exit_usage("Must specify lustre_filesystem as second argument", "GENERAL");
+    my $lustre_filesystem_taint = shift @args or error_exit_usage("Must specify lustre_filesystem as second argument", "GENERAL");
     # verify that lustre_filesystem is listed in /proc/mounts or /etc/mtab (and untaint)
-    $lustre_filesystem = untaint_valid_mount_point($lustre_filesystem) or error_exit("Invalid lustre filesystem [$lustre_filesystem], must specify absolute path to lustre mount point (as listed in /proc/mounts or /etc/mtab)");
+    my $lustre_filesystem = untaint_valid_mount_point($lustre_filesystem_taint) or error_exit("Invalid lustre filesystem [$lustre_filesystem_taint], must specify absolute path to lustre mount point (as listed in /proc/mounts or /etc/mtab)");
     
     my $lfs_cmd = shift @args or error_exit_usage("Must specify getquota, setquota, or find as third argument", "GENERAL");
     $lfs_cmd =~ m/^(getquota|setquota|find|[-]\S+)$/ or error_exit_usage("Unrecognized command: $lfs_cmd");
@@ -407,13 +411,7 @@ sub run {
 	GetOptionsFromArray( \@args,
 			     'help|h|?' => \$help ) or error_exit_usage("could not process generic options");
 	if ($help) {
-	    pod2usage({
-		-noperldoc => 1,
-		-verbose => 2,
-		-message => "Displaying full help:\n",
-		-exitval => 0,
-		-output => ">&STDOUT",
-		      });
+	    exit_full_help();
 	}
     }
 }
@@ -894,6 +892,27 @@ sub exit_usage {
 
     # this should not be reached, but call it in case something goes wrong with pod2usage
     error_exit($message);
+}
+
+#################################################################################
+# exit_full_help - print full perldocs to STDOUT and exit successfully
+# 
+# Inputs
+#    None
+# Returns
+#    Nothing (never returns)
+#################################################################################
+sub exit_full_help {
+    pod2usage({
+	-noperldoc => 1,
+	-verbose => 2,
+	-message => "Displaying full help:\n",
+	-exitval => 0,
+	-output => ">&STDOUT",
+	      });
+    
+    # this should not be reached, but call it in case something goes wrong with pod2usage
+    error_exit("exit_full_help reached end unexpectedly");
 }
 
 #################################################################################
