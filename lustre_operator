@@ -1060,7 +1060,7 @@ sub lfs_get_quota {
     
     my $headerline = <$lfs_quota_out_fh>;
     chomp $headerline;
-    $headerline =~ m/kbytes\s+quota\s+limit\s+grace\s+files\s+quota\s+limit\s+grace\s*$/ or error_exit("unexpected header in output from lfs quota for $filesystem $quota_type $quota_name");
+    $headerline =~ m/kbytes\s+quota\s+limit\s+grace\s+files\s+quota\s+limit\s+grace\s*$/ or error_exit("unexpected header in output from lfs quota for $filesystem $quota_type $quota_name: [$headerline]");
     
     my $fsline = <$lfs_quota_out_fh>;
     chomp $fsline;
