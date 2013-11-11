@@ -538,11 +538,11 @@ sub run_setquota {
 			 "group|g=s" => \@groups,
 			 "size-softlimit|b=s" => \$size_softlimit,
 			 "force-size-softlimit" => \$force_size_softlimit,
-			 "size-hardlimit|b=s" => \$size_hardlimit,
+			 "size-hardlimit|B=s" => \$size_hardlimit,
 			 "force-size-hardlimit" => \$force_size_hardlimit,
-			 "inode-softlimit|b=s" => \$inode_softlimit,	
+			 "inode-softlimit|i=s" => \$inode_softlimit,	
 			 "force-inode-softlimit" => \$force_inode_softlimit,	
-			 "inode-hardlimit|b=s" => \$inode_hardlimit,
+			 "inode-hardlimit|I=s" => \$inode_hardlimit,
 			 "force-inode-hardlimit" => \$force_inode_hardlimit,
 			 "help|?" => sub { exit_usage("Help for setquota command:","SETQUOTA") },
 	) or error_exit_usage("Could not parse setquota options", "SETQUOTA");
@@ -1627,7 +1627,9 @@ There are no known bugs in this program.
 
 Please report problems to L<mailto:hgi@sanger.ac.uk>
 
-Patches are welcome. 
+Patches/pull requests are welcome. 
+
+Development is hosted on github: L<https://github.com/wtsi-hgi/lustre_operator>
 
 
 =head1 AUTHOR
