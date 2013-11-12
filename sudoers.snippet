@@ -1,0 +1,15 @@
+# Example sudoers lines for lustre_operator
+
+# Allow the user opuser1 to run getquota, setquota, and find operations as root on /mnt/lustre01:
+opuser1 ALL = (root) NOPASSWD : /usr/local/bin/lustre_operator /usr/bin/lfs /mnt/lustre01
+
+# Allow the user opuser2 to run getquota, setquota, and find operations as root on /mnt/lustre(01|02|03):
+opuser2 ALL = (root) NOPASSWD : /usr/local/bin/lustre_operator /usr/bin/lfs /mnt/lustre01,\
+                                /usr/local/bin/lustre_operator /usr/bin/lfs /mnt/lustre02,\
+                                /usr/local/bin/lustre_operator /usr/bin/lfs /mnt/lustre03
+
+
+# Only allow opuser3 to run getquota and find subcommands on lustre01:
+opuser3 ALL = (root) NOPASSWD : /usr/local/bin/lustre_operator /usr/bin/lfs /mnt/lustre01 getquota,\
+	      	     	        /usr/local/bin/lustre_operator /usr/bin/lfs /mnt/lustre01 find
+
