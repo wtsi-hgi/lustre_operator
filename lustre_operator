@@ -143,6 +143,8 @@ Command (C<getquota>, C<setquota>, or C<find>) to run.
 
 =item [--help|-?]
 
+Print full documentation to STDOUT and exit
+
 =back
 
 =head1 GETQUOTA
@@ -154,6 +156,10 @@ lustre_operator B<<lfs_binary>> B<<lustre_filesystem>> getquota [B<<options>>]
 =head2 OPTIONS
 
 =over
+
+=item [--help|-?]
+
+Print getquota documentation to STDOUT and exit
 
 =item [--user|-u <<uname>>|<<uid>>]
 
@@ -250,6 +256,10 @@ Specify user or group by either name or number.
 
 =over
 
+=item [--help|-?]
+
+Print setquota documentation to STDOUT and exit
+
 =item [--size-softlimit|-b <<size-softlimit>>] 
 
 =item [--force-size-softlimit]
@@ -296,15 +306,15 @@ C<lustre_operator /usr/bin/lfs /mnt/lustre2 setquota --group group2
 
 =head2 SYNOPSIS
 
-lustre_operator B<<lfs_binary>> B<<lustre_filesystem>> find B<<dir>|<file>> [options]
+lustre_operator B<<lfs_binary>> B<<lustre_filesystem>> find B<<dir_or_file_list>> [options]
 
 =head2 ARGUMENTS
 
 =over
 
-=item B<<dir>|<file>>
+=item B<<dir_or_file_list>>
 
-Path from which to begin the recursive find.
+List of directories and/or files from which to begin the recursive find.
 
 =back
 
@@ -312,41 +322,83 @@ Path from which to begin the recursive find.
 
 =over
 
-=item [[!] --atime|-A [+-]N]
+=item [--help|-?]
 
-=item [[!] --mtime|-M [+-]N]
-
-=item [[!] --ctime|-C [+-]N]
-
-=item [--maxdepth|-D N]
-
-=item [[!] --name|-n <<pattern>>]
+Print find documentation to STDOUT and exit
 
 =item [--print0|-P]
 
-=item [--print|-p]
+Print matching files separated by NUL character instead of newline (which is the default)
 
-=item [[!] --obd|-O <<uuid[s]>>]
+=item [--atime|--not-atime [+-]N]
 
-=item [[!] --size|-s [+-]N[bkMGTP]]
+Match files last accessed N days ago (C<not-> inverts match)
 
-=item [[!] --type|-t <<filetype>>]
+C<+> prefix matches files last accessed N or more days ago. 
 
-=item [[!] --gid|-g|--group|-G <<gid>>|<<gname>>]
+C<-> prefix matches files last accessed N or fewer days ago. 
 
-=item [[!] --uid|-u|--user|-U <<uid>>|<<uname>>]
+=item [--mtime|--not-mtime [+-]N]
 
-=back
+Match files last modified N days ago (C<not-> inverts match) 
 
-=head3 NOTES
+C<+> prefix matches files last modified N or more days ago. 
 
-=over
+C<-> prefix matches files last modified N or fewer days ago. 
 
-=item !: used before an option indicates 'NOT' the requested attribute
+=item [--ctime|--not-ctime [+-]N]
 
-=item -: used before an value indicates 'AT MOST' the requested value
+Match files whose status was last changed N days ago (C<not-> inverts match) 
 
-=item +: used before an option indicates 'AT LEAST' the requested value
+C<+> prefix matches files whose status was last changed N or more days ago. 
+
+C<-> prefix matches files whose status was last changed N or fewer days ago. 
+
+=item [--name|--not-name <pattern>]
+
+Match file whose name (not path) matches pattern (C<not-> inverts match) 
+
+=item [--obd|--not-obd <uuid[s]>]
+
+Match files who have an object on the specified OST or OSTs (C<not-> inverts match) 
+
+<uuid[s]> can be a comma-delimited list of OST uuids.
+
+=item [--size|--not-size [+-]N[B|KiB|MiB|GiB|TiB|PiB|EiB|ZiB|YiB|kB|MB|GB|TB|PB|EB|ZB|YB]]
+
+Match files with size specified in bytes (default) or in specified units (C<not-> inverts match) 
+
+C<+> prefix matches files whose size is the specified size or larger.
+
+C<-> prefix matches files whose size is the specified size or smaller.
+
+=item [--type|--not-type <filetype>]
+
+Match files of the specified type (C<not-> inverts match), where <filetype> is one of: 
+C<b> - block, 
+C<c> - character, 
+C<d> - directory, 
+C<p> - pipe, 
+C<f> - file, 
+C<l> - symlink, 
+C<s> - socket, 
+C<D> - Door (Solaris).
+
+=item [--gid|--not-gid <gid>]
+
+Match files owned by specified group (by numeric gid) (C<not-> inverts match) 
+
+=item [--group|--not-group <gname>]
+
+Match files owned by specified group (by name) (C<not-> inverts match) 
+
+=item [--uid|--not-uid <uid>]
+
+Match files owned by specified user (by numeric uid) (C<not-> inverts match) 
+
+=item [--user|--not-user <uname>]
+
+Match files owned by specified user (by name) (C<not-> inverts match) 
 
 =back
 
@@ -380,7 +432,7 @@ sub run {
     #############################################################################
     # Process command-line
     #############################################################################
-    if ($args[0] =~ m/(--help|-h)/) {
+    if ($args[0] =~ m/(--help|-[?])/) {
 	# shortcut to full help (and exit)
 	exit_full_help();
     }
@@ -409,7 +461,7 @@ sub run {
 	unshift @args, $lfs_cmd;
 	my $help = 0;
 	GetOptionsFromArray( \@args,
-			     'help|h|?' => \$help ) or error_exit_usage("could not process generic options");
+			     'help|?' => \$help ) or error_exit_usage("could not process generic options", "GENERAL");
 	if ($help) {
 	    exit_full_help();
 	}
@@ -624,87 +676,303 @@ sub run_find {
     my $filesystem = shift;
     my @args = @_;
 
+    # stat the mount point to get the dev_t for the filesystem (to check each <dir|file> entry against)
+    (my $fs_dev, undef) = stat $filesystem or error_exit_usage("could not stat mount point $filesystem", "FIND");
+
+    # process dir_or_file_list arguments up until the first option (beginning with "--") 
+    my @dir_or_file_list;
+  DIRFILEARG: while (my $dir_or_file = shift @args) {
+      if (defined($dir_or_file) && $dir_or_file !~ m/^--/) {
+	  # have a non-option argument, must start with $filesystem and be located on the same device as $filesystem ($fs_dev) 
+	  $dir_or_file =~ m/^($filesystem.*)$/ or error_exit_usage("<dir|file> $dir_or_file must begin with $filesystem", "FIND");
+	  $dir_or_file = $1;
+	  
+	  # verify that $dir_or_file is either a plain file or dir (-f and -d will follow symlinks, as does `lfs find`)
+	  ( -f $dir_or_file || -d $dir_or_file ) or error_exit_usage("$dir_or_file is not a plain file or directory", "FIND");
+	  
+	  # stat also follows symlinks, so in case of symlinks it is the target stat that we will get
+	  (my $dir_or_file_dev, undef) = stat $dir_or_file or error_exit_usage("could not stat <dir|file> $dir_or_file", "FIND");
+	  
+	  # verify dir_or_file's dev is the same as the filesystem's dev
+	  ($dir_or_file_dev == $fs_dev) or error_exit("$dir_or_file and $filesystem are not on the same device ($dir_or_file is on device $dir_or_file_dev but $filesystem is on device $fs_dev)");
+	  push @dir_or_file_list, $dir_or_file;
+      } else {
+	  # have either an option argument (starting with '--') or no argument, put it back
+	  unshift @args, $dir_or_file;
+	  # end dir_or_file_list argument processing and begin option processing
+	  last DIRFILEARG;
+      }
+  }
+    
+    # get options
+    my $print0 = 0;
+    my $maxdepth;
+    my $atime;
+    my $not_atime;
+    my $mtime;
+    my $not_mtime;
+    my $ctime;
+    my $not_ctime;
+    my $name;
+    my $not_name;
+    my $obd;
+    my $not_obd;
+    my $size;
+    my $not_size;
+    my $type;
+    my $not_type;
+    my $gid;
+    my $not_gid;
+    my $group;
+    my $not_group;
+    my $uid;
+    my $not_uid;
+    my $user;
+    my $not_user;
+    GetOptionsFromArray( \@args,
+			 "print0|P"          => \$print0,
+			 "maxdepth|D=i{1,1}" => \$maxdepth,  # N
+			 "atime=s{1,1}"      => \$atime,     # [+-]N
+			 "not-atime=s{1,1}"  => \$not_atime, # [+-]N
+			 "mtime=s{1,1}"      => \$mtime,     # [+-]N
+			 "not-mtime=s{1,1}"  => \$not_mtime, # [+-]N
+			 "ctime=s{1,1}"      => \$ctime,     # [+-]N
+			 "not-ctime=s{1,1}"  => \$not_ctime, # [+-]N
+			 "name=s{1,1}"       => \$name,      # <pattern>
+			 "not-name=s{1,1}"   => \$not_name,  # <pattern>
+			 "obd=s{1,1}"        => \$obd,       # <uuids>
+			 "not-obd=s{1,1}"    => \$not_obd,   # <uuids>
+			 "size=s{1,1}"       => \$size,      # [+-]N[B|KiB|MiB|GiB|TiB|PiB|EiB|ZiB|YiB|kB|MB|GB|TB|PB|EB|ZB|YB]
+			 "not-size=s{1,1}"   => \$not_size,  # [+-]N[B|KiB|MiB|GiB|TiB|PiB|EiB|ZiB|YiB|kB|MB|GB|TB|PB|EB|ZB|YB]
+			 "type=s{1,1}"       => \$type,      # <filetype>
+			 "not-type=s{1,1}"   => \$not_type,  # <filetype>
+			 "gid=i{1,1}"        => \$gid,       # <gid>
+			 "not-gid=i{1,1}"    => \$not_gid,   # <gid>
+			 "group=s{1,1}"      => \$group,     # <group>
+			 "not-group=s{1,1}"  => \$not_group, # <group>
+			 "uid=i{1,1}"        => \$uid,       # <uid>
+			 "not-uid=i{1,1}"    => \$not_uid,   # <uid>
+			 "user=s{1,1}"       => \$user,      # <username>
+			 "not-user=s{1,1}"   => \$not_user,  # <username>
+			 "help|?" => sub { exit_usage("Help for find command:","FIND") },
+	) or error_exit_usage("Could not parse find options", "FIND");
+
+    # check that we have some dir_or_file entries
+    (@dir_or_file_list > 0) or error_exit_usage("must specify <dir_or_file_list> before options", "FIND");
+    
     my @lfs_args;
     push @lfs_args, "find";
-    my $matchpat = 0;
-
-    # stat the mount point to get the dev_t for the filesystem (to check each <dir|file> entry against)
-    (my $fs_dev, undef) = stat $filesystem or error_exit("could not stat mount point $filesystem");
     
-    # the first arguments (until the first ! or -) must start with $filesystem
-    while (!$matchpat) {
-	my $dirorfile = shift @args;
-	if (!defined($dirorfile) || $dirorfile =~ m/^[-!]/) {
-	    # have an argument staring with '!' or '-' (or no argument)
-	    $matchpat = 1;
-	    unshift @args, $dirorfile;
-	} else {
-            $dirorfile =~ m/^($filesystem.*)$/ or error_exit("<dir|file> $dirorfile must begin with $filesystem");
-	    $dirorfile = $1;
-	    # -f and -d will follow symlinks (as does `lfs find`)
-	    ( -f $dirorfile || -d $dirorfile ) or error_exit("$dirorfile is not a plain file or directory");
-	    # stat also follows symlinks, so in case of symlinks it is the target stats that we will get
-	    (my $dirorfile_dev, undef) = stat $dirorfile or error_exit("could not stat <dir|file> $dirorfile");
-	    ($dirorfile_dev == $fs_dev) or error_exit("$dirorfile and $filesystem are not on the same device ($dirorfile is on device $dirorfile_dev but $filesystem is on device $fs_dev)");
-	    push @lfs_args, $dirorfile;
-	}
-    } 
-    (@lfs_args > 0) or error_exit("must specify <dir|file> before match paramters");
-    # now we should be in match parameters section 
-    my $arg = shift @args;
-    while (defined($arg)) {
-	if ($arg =~ m/^[!]$/) {
-	    push @lfs_args, '!';
-	} elsif ($arg =~ m/^(--{0,1}[a-zA-Z]{1,})$/) {
-	    $arg = $1;
-	    if ($arg =~ m/^(--print0{0,1}|-[pP])$/) {
-		# have one of the args that does not require a parameter
-		push @lfs_args, $arg;
-	    } else {
-		# option requires a parameter
-		my $param = shift @args;
-		# check param syntax depending on value of arg
-		if ($arg =~ m/^-(-(atime|mtime|ctime)|[AMC])$/) {
-		    # [+-]N
-		    $param =~ m/^([-+]{0,1}[0-9]+)$/ or error_exit("parameter after $arg was not [+-]N ($param)");
-		    $param = $1;
-		} elsif ($arg =~ m/^-(-(maxdepth)|[D])$/) {
-		    # N
-		    $param =~ m/^([0-9]+)$/ or error_exit("parameter after $arg was not numeric ($param)");
-		    $param = $1;
-		} elsif ($arg =~ m/^-(-(size)|[s])$/) {
-		    # [+-]N[bkMGTP]
-		    $param =~ m/^([-+]{0,1}[0-9]+[bkMGTP]{0,1})$/ or error_exit("parameter after $arg was not [+-]N[bkMGTP] ($param)");
-		    $param = $1;
-		} elsif ($arg =~ m/^-(-(name)|[n])$/) {
-		    # <pattern>
-		    $param =~ m/^([^\/]+)$/ or error_exit("parameter after $arg contained a '/' ($param)");
-		    $param = $1;
-		} elsif ($arg =~ m/^-(-(obd)|[O])$/) {
-		    # <uuid[s]>
-		    $param =~ m/^([-_,[:alnum:]]+)$/ or error_exit("parameter after $arg was not <uuid[s]> ($param)");
-		    $param = $1;
-		} elsif ($arg =~ m/^-(-(type)|[t])$/) {
-		    # <filetype> == [bcdpflsD]
-		    $param =~ m/^([bcdpflsD])$/ or error_exit("parameter after $arg was not [bcdpflsD] ($param)");
-		    $param = $1;
-		} elsif ($arg =~ m/^-(-(uid|user|gid|group)|[uUgG])$/) {
-		    # <gid>|<gname>|<uid>|<uname>
-		    $param =~ m/^([0-9]+|[a-z_][a-z0-9_-]{0,15})$/ or error_exit("parameter after $arg was not <gid>|<gname>|<uid>|<uname> ($param)");
-		    $param = $1;
-		} else {
-		    error_exit("unsupported find argument $arg");
-		}
-		push @lfs_args, $arg;
-		push @lfs_args, $param;
-	    }
-	} else {
-	    error_exit("invalid find argument $arg");
-	}
-	$arg = shift @args;
+    if (defined($atime) && defined($not_atime)) {
+	error_exit("cannot specify both --atime and --not-atime");
     }
+    
+    if (defined($atime)) {
+	$atime =~ m/^([-+]{0,1}[0-9]+)$/ or error_exit_usage("atime was not [+-]N ($atime)", "FIND");
+	$atime = $1;
+	push @lfs_args, '--atime', $atime;
+    }
+
+    if (defined($not_atime)) {
+	$not_atime =~ m/^([-+]{0,1}[0-9]+)$/ or error_exit_usage("not_atime was not [+-]N ($not_atime)", "FIND");
+	$not_atime = $1;
+	push @lfs_args, '!', '--atime', $not_atime;
+    }
+
+    if (defined($mtime) && defined($not_mtime)) {
+	error_exit("cannot specify both --mtime and --not-mtime");
+    }
+    
+    if (defined($mtime)) {
+	$mtime =~ m/^([-+]{0,1}[0-9]+)$/ or error_exit_usage("mtime was not [+-]N ($mtime)", "FIND");
+	$mtime = $1;
+	push @lfs_args, '--mtime', $mtime;
+    }
+
+    if (defined($not_mtime)) {
+	$not_mtime =~ m/^([-+]{0,1}[0-9]+)$/ or error_exit_usage("not_mtime was not [+-]N ($not_mtime)", "FIND");
+	$not_mtime = $1;
+	push @lfs_args, '!', '--mtime', $not_mtime;
+    }
+
+    if (defined($ctime) && defined($not_ctime)) {
+	error_exit("cannot specify both --ctime and --not-ctime");
+    }
+    
+    if (defined($ctime)) {
+	$ctime =~ m/^([-+]{0,1}[0-9]+)$/ or error_exit_usage("ctime was not [+-]N ($ctime)", "FIND");
+	$ctime = $1;
+	push @lfs_args, '--ctime', $ctime;
+    }
+
+    if (defined($not_ctime)) {
+	$not_ctime =~ m/^([-+]{0,1}[0-9]+)$/ or error_exit_usage("not_ctime was not [+-]N ($not_ctime)", "FIND");
+	$not_ctime = $1;
+	push @lfs_args, '!', '--ctime', $not_ctime;
+    }
+
+    if (defined($maxdepth)) {
+	$maxdepth =~ m/^([0-9]+)$/ or error_exit_usage("maxdepth was not an integer ($maxdepth)", "FIND");
+	$maxdepth = $1;
+	push @lfs_args, '--maxdepth', $maxdepth;
+    }
+    
+    if (defined($name) && defined($not_name)) {
+	error_exit("cannot specify both --name and --not-name");
+    }
+    
+    if (defined($name)) {
+	# <pattern>
+	$name =~ m/^([^\/]+)$/ or error_exit_usage("name contained a '/' ($name)", "FIND");
+	$name = $1;
+	push @lfs_args, '--name', $name;
+    }
+
+    if (defined($not_name)) {
+	# <pattern>
+	$not_name =~ m/^([^\/]+)$/ or error_exit_usage("not_name contained a '/' ($not_name)", "FIND");
+	$not_name = $1;
+	push @lfs_args, '!', '--name', $not_name;
+    }
+
+    if ($print0) {
+	push @lfs_args, '--print0';
+    }
+    
+    if (defined($obd) && defined($not_obd)) {
+	error_exit("cannot specify both --obd and --not-obd");
+    }
+    
+    if (defined($obd)) {
+	$obd =~ m/^([-_,[:alnum:]]+)$/ or error_exit_usage("obd was not <uuid[s]> ($obd)", "FIND");
+	$obd = $1;
+	push @lfs_args, '--obd', $obd;
+    }
+    
+    if (defined($not_obd)) {
+	$obd =~ m/^([-_,[:alnum:]]+)$/ or error_exit_usage("not_obd was not <uuid[s]> ($not_obd)", "FIND");
+	$not_obd = $1;
+	push @lfs_args, '!', '--obd', $not_obd;
+    }
+
+    if (defined($size) && defined($not_size)) {
+	error_exit("cannot specify both --size and --not-size");
+    }
+    
+    if (defined($size)) {
+	# [+-]N[B|KiB|MiB|GiB|TiB|PiB|EiB|ZiB|YiB|kB|MB|GB|TB|PB|EB|ZB|YB]
+	$size =~ m/^([-+]{0,1})([0-9]+(B|KiB|MiB|GiB|TiB|PiB|EiB|ZiB|YiB|kB|MB|GB|TB|PB|EB|ZB|YB){0,1})$/ or error_exit_usage("size was not [+-]N[B|KiB|MiB|GiB|TiB|PiB|EiB|ZiB|YiB|kB|MB|GB|TB|PB|EB|ZB|YB] ($size)", "FIND");
+	my $plus_minus = $1;
+	my $formatted_units = $2;
+	my $bytes = convert_to_bytes($formatted_units) or error_exit("could not convert size units to bytes ($size)");
+	push @lfs_args, '--size', $plus_minus.$bytes;
+    }
+
+    if (defined($not_size)) {
+	# [+-]N[B|KiB|MiB|GiB|TiB|PiB|EiB|ZiB|YiB|kB|MB|GB|TB|PB|EB|ZB|YB]
+	$not_size =~ m/^([-+]{0,1})([0-9]+(B|KiB|MiB|GiB|TiB|PiB|EiB|ZiB|YiB|kB|MB|GB|TB|PB|EB|ZB|YB){0,1})$/ or error_exit_usage("not_size was not [+-]N[B|KiB|MiB|GiB|TiB|PiB|EiB|ZiB|YiB|kB|MB|GB|TB|PB|EB|ZB|YB] ($size)", "FIND");
+	my $plus_minus = $1;
+	my $formatted_units = $2;
+	my $bytes = convert_to_bytes($formatted_units) or error_exit("could not convert not_size units to bytes ($not_size)");
+	push @lfs_args, '!', '--size', $plus_minus.$bytes;
+    }
+
+    if (defined($type) && defined($not_type)) {
+	error_exit("cannot specify both --type and --not-type");
+    }
+
+    if (defined($type)) {
+	# <filetype> == [bcdpflsD] 
+	$type =~ m/^([bcdpflsD])$/ or error_exit_usage("type was not [b|c|d|p|f|l|s|D] ($type)", "FIND");
+	$type = $1;
+	push @lfs_args, '--type', $type;
+    }
+
+    if (defined($not_type)) {
+	# <filetype> == [bcdpflsD] 
+	$type =~ m/^([bcdpflsD])$/ or error_exit_usage("not_type was not [b|c|d|p|f|l|s|D] ($type)", "FIND");
+	$type = $1;
+	push @lfs_args, '!', '--type', $type;
+    }
+
+    if (defined($gid) && defined($not_gid)) {
+	error_exit("cannot specify both --gid and --not-gid");
+    }
+
+    if (defined($gid)) {
+	# <gid>
+	$gid =~ m/^([0-9]+)$/ or error_exit_usage("gid was not an integer ($gid)", "FIND");
+	$gid = $1;
+	push @lfs_args, '--gid', $gid;
+    }
+
+    if (defined($not_gid)) {
+	# <gid>
+	$gid =~ m/^([0-9]+)$/ or error_exit_usage("not_gid was not an integer ($gid)", "FIND");
+	$gid = $1;
+	push @lfs_args, '!', '--gid', $gid;
+    }
+
+    if (defined($group) && defined($not_group)) {
+	error_exit("cannot specify both --group and --not-group");
+    }
+
+    if (defined($group)) {
+	# <group_name>
+	$group =~ m/^([a-z_][a-z0-9_-]{0,31})$/ or error_exit_usage("group was not valid ($group)", "FIND");
+	$group = $1;
+	push @lfs_args, '--group', $group;
+    }
+
+    if (defined($not_group)) {
+	# <group_name>
+	$not_group =~ m/^([a-z_][a-z0-9_-]{0,31})$/ or error_exit_usage("not_group was not valid ($not_group)", "FIND");
+	$not_group = $1;
+	push @lfs_args, '!', '--group', $not_group;
+    }
+
+    if (defined($uid) && defined($not_uid)) {
+	error_exit("cannot specify both --uid and --not-uid");
+    }
+
+    if (defined($uid)) {
+	# <uid>
+	$uid =~ m/^([0-9]+)$/ or error_exit_usage("uid was not an integer ($uid)", "FIND");
+	$uid = $1;
+	push @lfs_args, '--uid', $uid;
+    }
+
+    if (defined($not_uid)) {
+	# <uid>
+	$not_uid =~ m/^([0-9]+)$/ or error_exit_usage("not_uid was not an integer ($not_uid)", "FIND");
+	$not_uid = $1;
+	push @lfs_args, '!', '--uid', $not_uid;
+    }
+
+    if (defined($user) && defined($not_user)) {
+	error_exit("cannot specify both --user and --not-user");
+    }
+
+    if (defined($user)) {
+	# <user_name>
+	$user =~ m/^([a-z_][a-z0-9_-]{0,31})$/ or error_exit_usage("user was not valid ($user)", "FIND");
+	$user = $1;
+	push @lfs_args, '--user', $user;
+    }
+
+    if (defined($not_user)) {
+	# <user_name>
+	$not_user =~ m/^([a-z_][a-z0-9_-]{0,31})$/ or error_exit_usage("not_user was not valid ($not_user)", "FIND");
+	$not_user = $1;
+	push @lfs_args, '!', '--user', $not_user;
+    }
+    
+    # dir_or_file_list at the end
+    push @lfs_args, @dir_or_file_list;
+
     # exec to run lfs find (never to return)
     exec_lfs($lfs_bin, @lfs_args);
+
     error_exit("unexpected error in exec_lfs find");
 }
 
@@ -858,7 +1126,7 @@ sub error_exit_usage {
 	-verbose => 99,
 	-sections => $sections,
 	      });
-
+    
     # this should not be reached, but call it in case something goes wrong with pod2usage
     error_exit($message);
 }
@@ -1303,11 +1571,11 @@ sub output_quotas {
 	    error_exit("output_quotas: name did not match for $type/$name") unless $quota->{"name"} eq $name;
 	    foreach my $key (keys %{$quota}) {
 		if ($key =~ m/^size-(used|softlimit|hardlimit|remaining)$/ && $quota->{$key} =~ m/^[0-9]+$/) {
-		    $unitquotas->{$type}{$name}{$key} = convert_bytes($quota->{$key}, $size_units);
+		    $unitquotas->{$type}{$name}{$key} = convert_from_bytes($quota->{$key}, $size_units);
 		} elsif ($key =~ m/^inode-(used|softlimit|hardlimit|remaining)$/ && $quota->{$key} =~ m/^[0-9]+$/) {
-		    $unitquotas->{$type}{$name}{$key} = convert_inodes($quota->{$key}, $inode_units);
+		    $unitquotas->{$type}{$name}{$key} = convert_from_inodes($quota->{$key}, $inode_units);
 		} elsif ($key =~ m/-grace$/ && $quota->{$key} =~ m/^[0-9]+$/) {
-		    $unitquotas->{$type}{$name}{$key} = convert_seconds($quota->{$key}, $time_units);
+		    $unitquotas->{$type}{$name}{$key} = convert_from_seconds($quota->{$key}, $time_units);
 		} else {
 		    $unitquotas->{$type}{$name}{$key} = $quota->{$key};
 		}
@@ -1415,7 +1683,7 @@ sub output_quotas_table {
 }
 
 #################################################################################
-# convert_bytes - convert bytes to formatted units
+# convert_from_bytes - convert bytes to formatted units
 # 
 # Inputs
 #    1: bytes
@@ -1423,15 +1691,15 @@ sub output_quotas_table {
 # Returns
 #    formatted string including units
 #################################################################################
-sub convert_bytes {
+sub convert_from_bytes {
     my $bytes = shift;
     my $units = shift || "";
     if ( (!$units) || $units eq 'B') {
 	return $bytes.$OUTPUT_UNIT_SEP.$units;
     } elsif ($units eq 'human_binary') {
-	return convert_bytes_human($bytes, 0);
+	return convert_from_bytes_human($bytes, 0);
     } elsif ($units eq 'human_decimal') {
-	return convert_bytes_human($bytes, 1);
+	return convert_from_bytes_human($bytes, 1);
     } elsif ($units ne 'B') {
 	# fixed unit specification requiring conversion
 	for (my $i=1; $i<@{$BINARY_UNIT_LABELS}; $i++) {
@@ -1447,7 +1715,37 @@ sub convert_bytes {
 }
 
 #################################################################################
-# convert_inodes - convert inode count to formatted units
+# convert_to_bytes - convert from formatted units to bytes
+# 
+# Inputs
+#    1: formatted string with value and units (e.g. "1.5TiB")
+# Returns
+#    bytes
+#################################################################################
+sub convert_to_bytes {
+    my $formatted = shift;
+    
+    $formatted =~ m/^([0-9]+)[[:space:]]*((B|KiB|MiB|GiB|TiB|PiB|EiB|ZiB|YiB|kB|MB|GB|TB|PB|EB|ZB|YB){0,1})$/ or error_exit("convert_to_bytes: malformatted string [$formatted]");
+    
+    my $value = $1;
+    my $units = $2 || "B";
+    
+    # fixed unit specification requiring conversion
+    for (my $i=0; $i<@{$BINARY_UNIT_LABELS}; $i++) {
+	if ($BINARY_UNIT_LABELS->[$i] eq $units) {
+	    return sprintf("%d", ($value * (1024 ** $i)));
+	}
+	if ($DECIMAL_UNIT_LABELS->[$i] eq $units) {
+	    return sprintf("%d", ($value * (1000 ** $i)));
+	}
+    }
+    
+    error_exit("unknown size units [$units]. specify one of: ".join(', ', @{$BINARY_UNIT_LABELS}, @{$DECIMAL_UNIT_LABELS}));
+}
+
+
+#################################################################################
+# convert_from_inodes - convert inode count to formatted units
 # 
 # Inputs
 #    1: inode count
@@ -1455,14 +1753,14 @@ sub convert_bytes {
 # Returns
 #    formatted string including units
 #################################################################################
-sub convert_inodes {
+sub convert_from_inodes {
     my $inodes = shift;
     my $units = shift;
     if (!$units) {
 	return $inodes;
     } else {
 	if ($units eq 'human') {
-	    return convert_inodes_human($inodes);
+	    return convert_from_inodes_human($inodes);
 	} else {
 	    # fixed unit specification
 	    for (my $i=1; $i<@{$DECIMAL_PREFIXES}; $i++) {
@@ -1476,7 +1774,7 @@ sub convert_inodes {
 } 
 
 #################################################################################
-# convert_seconds - convert seconds to formatted units
+# convert_from_seconds - convert seconds to formatted units
 # 
 # Inputs
 #    1: seconds
@@ -1484,13 +1782,13 @@ sub convert_inodes {
 # Returns
 #    formatted string including units
 #################################################################################
-sub convert_seconds {
+sub convert_from_seconds {
     my $gracetime = shift;
     my $units = shift;
     if ( (!$units) || $units eq 's') {
 	return $gracetime.$OUTPUT_UNIT_SEP.$units;
     } elsif ($units eq 'human') {
-	return convert_seconds_human($gracetime);
+	return convert_from_seconds_human($gracetime);
     } else {
 	# fixed unit specification
 	for (my $i=1; $i<@{$TIME_UNIT_LABELS}; $i++) {
@@ -1503,7 +1801,7 @@ sub convert_seconds {
 } 
 
 #################################################################################
-# convert_bytes_human - convert bytes to human-readable units
+# convert_from_bytes_human - convert bytes to human-readable units
 # 
 # Inputs
 #    1: bytes
@@ -1511,7 +1809,7 @@ sub convert_seconds {
 # Returns
 #    formatted string including units
 #################################################################################
-sub convert_bytes_human {
+sub convert_from_bytes_human {
     my $bytes = shift;
     my $decimal = shift;
     
@@ -1536,14 +1834,14 @@ sub convert_bytes_human {
 }
 
 #################################################################################
-# convert_inodes_human - convert inode count to human-readable units
+# convert_from_inodes_human - convert inode count to human-readable units
 # 
 # Inputs
 #    1: inode count
 # Returns
 #    formatted string including units
 #################################################################################
-sub convert_inodes_human {
+sub convert_from_inodes_human {
     my $count = shift;
     
     my $base = 1000;
@@ -1563,14 +1861,14 @@ sub convert_inodes_human {
 }
 
 #################################################################################
-# convert_seconds_human - convert seconds to human-readable units
+# convert_from_seconds_human - convert seconds to human-readable units
 # 
 # Inputs
 #    1: time in seconds 
 # Returns
 #    formatted string including units
 #################################################################################
-sub convert_seconds_human {
+sub convert_from_seconds_human {
     my $seconds = shift;
     
     my $result = "";
