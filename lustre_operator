@@ -262,6 +262,8 @@ Print setquota documentation to STDOUT and exit
 
 =item [--size-softlimit|-b <<size-softlimit>>] 
 
+Set the size softlimit, specified in bytes or in specified units (e.g. "1.5TB" or "2 GiB")
+
 =item [--force-size-softlimit]
 
 =item [--size-hardlimit|-B <<size-hardlimit>>]
@@ -432,7 +434,7 @@ sub run {
     #############################################################################
     # Process command-line
     #############################################################################
-    if ($args[0] =~ m/(--help|-[?])/) {
+    if (defined($args[0]) && $args[0] =~ m/(--help|-[?])/) {
 	# shortcut to full help (and exit)
 	exit_full_help();
     }
@@ -575,28 +577,28 @@ sub run_setquota {
     # options
     my @users;
     my @groups;
-    my $size_softlimit = 0;
+    my $size_softlimit = undef;
     my $force_size_softlimit = 0;
-    my $size_hardlimit = 0;
+    my $size_hardlimit = undef;
     my $force_size_hardlimit = 0;
-    my $inode_softlimit = 0;
+    my $inode_softlimit = undef;
     my $force_inode_softlimit = 0;
-    my $inode_hardlimit = 0;
+    my $inode_hardlimit = undef;
     my $force_inode_hardlimit = 0;
     
     # get options
     GetOptionsFromArray( \@args,
-			 "user|u=s" => \@users,
-			 "group|g=s" => \@groups,
-			 "size-softlimit|b=s" => \$size_softlimit,
-			 "force-size-softlimit" => \$force_size_softlimit,
-			 "size-hardlimit|B=s" => \$size_hardlimit,
-			 "force-size-hardlimit" => \$force_size_hardlimit,
-			 "inode-softlimit|i=s" => \$inode_softlimit,	
+			 "user|u=s"              => \@users,
+			 "group|g=s"             => \@groups,
+			 "size-softlimit|b=s"    => \$size_softlimit,
+			 "force-size-softlimit"  => \$force_size_softlimit,
+			 "size-hardlimit|B=s"    => \$size_hardlimit,
+			 "force-size-hardlimit"  => \$force_size_hardlimit,
+			 "inode-softlimit|i=s"   => \$inode_softlimit,	
 			 "force-inode-softlimit" => \$force_inode_softlimit,	
-			 "inode-hardlimit|I=s" => \$inode_hardlimit,
+			 "inode-hardlimit|I=s"   => \$inode_hardlimit,
 			 "force-inode-hardlimit" => \$force_inode_hardlimit,
-			 "help|?" => sub { exit_usage("Help for setquota command:","SETQUOTA") },
+			 "help|?"                => sub { exit_usage("Help for setquota command:","SETQUOTA") },
 	) or error_exit_usage("Could not parse setquota options", "SETQUOTA");
     
     if (@users <= 0 && @groups <= 0) {
@@ -605,28 +607,44 @@ sub run_setquota {
 
     my %newquota;
     my %checkquota;
-    if ($size_softlimit) {
-	$newquota{"size-softlimit"} = $size_softlimit;
+    if (defined($size_softlimit)) {
+	if ($size_softlimit eq $NO_QUOTA) {
+	    $newquota{"size-softlimit"} = $NO_QUOTA; 
+	} else {
+	    $newquota{"size-softlimit"} = convert_to_bytes($size_softlimit);
+	}
 	if ( !$force_size_softlimit ) {
-	    $checkquota{"size-softlimit"} = $size_softlimit;
+	    $checkquota{"size-softlimit"} = $newquota{"size-softlimit"};
 	}
     }
-    if ($size_softlimit) {
-	$newquota{"size-hardlimit"} = $size_hardlimit;
+    if (defined($size_hardlimit)) {
+	if ($size_hardlimit eq $NO_QUOTA) {
+	    $newquota{"size-hardlimit"} = $NO_QUOTA;
+	} else {
+	    $newquota{"size-hardlimit"} = convert_to_bytes($size_hardlimit);
+	}
 	if ( !$force_size_hardlimit ) {
-	    $checkquota{"size-hardlimit"} = $size_hardlimit;
+	    $checkquota{"size-hardlimit"} = $newquota{"size-hardlimit"};
 	}
     }
-    if ($inode_softlimit) {
-	$newquota{"inode-softlimit"} = $inode_softlimit;
+    if (defined($inode_softlimit)) {
+	if ($inode_softlimit eq $NO_QUOTA) {
+	    $newquota{"inode-softlimit"} = $NO_QUOTA;
+	} else {
+	    $newquota{"inode-softlimit"} = convert_to_inodes($inode_softlimit);
+	}
 	if ( !$force_inode_softlimit ) {
-	    $checkquota{"inode-softlimit"} = $inode_softlimit;
+	    $checkquota{"inode-softlimit"} = $newquota{"inode-softlimit"};
 	}
     }
-    if ($inode_softlimit) {
-	$newquota{"inode-hardlimit"} = $inode_hardlimit;
+    if (defined($inode_hardlimit)) {
+	if ($inode_hardlimit eq $NO_QUOTA) {
+	    $newquota{"inode-hardlimit"} = $NO_QUOTA;
+	} else {
+	    $newquota{"inode-hardlimit"} = convert_to_inodes($inode_hardlimit);
+	}
 	if ( !$force_inode_hardlimit ) {
-	    $checkquota{"inode-hardlimit"} = $inode_hardlimit;
+	    $checkquota{"inode-hardlimit"} = $newquota{"inode-hardlimit"};
 	}
     }
     
@@ -1289,7 +1307,7 @@ sub lfs_get_quota {
     valid_abs_path($filesystem) or error_exit("get_quota: filesystem $filesystem not valid");
     $filesystem =~ m/^(\/.*)$/;
     $filesystem = $1;
-    $quota_name =~ m/^([0-9]+|[a-z_][a-z0-9_-]{0,31})$/ or error_exit("user/group name $quota_name not valid");
+    $quota_name =~ m/^([0-9]+|[a-z_][a-z0-9_-]{0,31})$/ or error_exit("get_quota: user/group name $quota_name not valid");
     $quota_name = $1;
     
     my $lfs_quota_out_fh;
@@ -1361,8 +1379,8 @@ sub lfs_get_quota {
     $quota{"size-grace"} = lfs_grace_time_to_seconds($5);
     $quota{"inode-used"} = $6; 
     $quota{"inode-overquota"} = $7;
-    $quota{"inode-softlimit"} = lfs_process_inode_limit($8);
-    $quota{"inode-hardlimit"} = lfs_process_inode_limit($9);
+    $quota{"inode-softlimit"} = lfs_process_inode_limit_in($8);
+    $quota{"inode-hardlimit"} = lfs_process_inode_limit_in($9);
     $quota{"inode-grace"} = lfs_grace_time_to_seconds($10);
     
     # record timestamp along with the data
@@ -1405,6 +1423,13 @@ sub lfs_set_quota {
     my $quota_name = shift; # 4: user or group name
     my $new_quota = shift;  # 5: hashref for quota to set
 
+    # validate arguments and untaint
+    valid_abs_path($filesystem) or error_exit("set_quota: filesystem $filesystem not valid");
+    $filesystem =~ m/^(\/.*)$/;
+    $filesystem = $1;
+    $quota_name =~ m/^([0-9]+|[a-z_][a-z0-9_-]{0,31})$/ or error_exit("set_quota: user/group name $quota_name not valid");
+    $quota_name = $1;
+
     my @lfs_args;
     push @lfs_args, "setquota";
     
@@ -1419,16 +1444,16 @@ sub lfs_set_quota {
     push @lfs_args, $uorg, $quota_name;
 
     if (defined($new_quota->{"size-softlimit"})) { 
-	push @lfs_args, "--size-softlimit", $new_quota->{"size-softlimit"};
+	push @lfs_args, "--block-softlimit", lfs_bytes_to_block_limit($new_quota->{"size-softlimit"});
     }
     if (defined($new_quota->{"size-hardlimit"})) {
-	push @lfs_args, "--size-hardlimit", $new_quota->{"size-hardlimit"};
+	push @lfs_args, "--block-hardlimit", lfs_bytes_to_block_limit($new_quota->{"size-hardlimit"});
     }
     if (defined($new_quota->{"inode-softlimit"})) {
-	push @lfs_args, "--inode-softlimit", $new_quota->{"inode-softlimit"};
+	push @lfs_args, "--inode-softlimit", lfs_process_outode_limit_out($new_quota->{"inode-softlimit"});
     }
     if (defined($new_quota->{"inode-hardlimit"})) {
-	push @lfs_args, "--inode-hardlimit", $new_quota->{"inode-hardlimit"};
+	push @lfs_args, "--inode-hardlimit", lfs_process_outode_limit_out($new_quota->{"inode-hardlimit"});
     }
     push @lfs_args, $filesystem;
     my $lfs_setquota_out_fh = exec_lfs_pipe_open($lfs_bin, @lfs_args);
@@ -1438,18 +1463,37 @@ sub lfs_set_quota {
 }
 
 #################################################################################
-# lfs_process_inode_limit - process inode limits reported by lfs command
+# lfs_process_inode_limit_in - process inode limits reported by lfs command
 # 
 # Inputs
 #    1: inode count as output by lfs command
 # Returns
 #    inode count or $NO_QUOTA if unlimited
 #################################################################################
-sub lfs_process_inode_limit {
+sub lfs_process_inode_limit_in {
     my $inode_count = shift;
     
     if ($inode_count =~ m/^$LFS_QUOTA_INODE_UNLIMITED$/) {
         return $NO_QUOTA;
+    } else {
+	return $inode_count;
+    }
+}
+
+#################################################################################
+# lfs_process_inode_limit_out - process internal inode limits to those suited 
+# for lfs command
+# 
+# Inputs
+#    1: inode limit
+# Returns
+#    inode limit or $LFS_QUOTA_INODE_UNLIMITED if unlimited
+#################################################################################
+sub lfs_process_outode_limit_out {
+    my $inode_count = shift;
+    
+    if ($inode_count =~ m/^$NO_QUOTA$/) {
+	return $LFS_QUOTA_INODE_UNLIMITED;
     } else {
 	return $inode_count;
     }
@@ -1474,6 +1518,27 @@ sub lfs_block_limit_to_bytes {
     }
     
     return $bytes;
+}
+
+#################################################################################
+# lfs_bytes_to_block_limit - convert bytes to block limit for lfs command
+# 
+# Inputs
+#    1:bytes
+# Returns
+#    limit in blocks (or $LFS_QUOTA_SIZE_UNLIMITED if unlimited)
+#################################################################################
+sub lfs_bytes_to_block_limit {
+    my $bytes = shift;
+    my $blocks = 0;
+    
+    if ($bytes =~ m/^$NO_QUOTA$/) {
+	$blocks = $LFS_QUOTA_SIZE_UNLIMITED;
+    } else {
+	$blocks = sprintf("%d", ($bytes / $LFS_BLOCKSIZE));
+    }
+    
+    return $blocks;
 }
 
 #################################################################################
@@ -1535,7 +1600,7 @@ sub check_quota_change {
 	    my $used_key = $1."-used";
 	    if ( !over_quota($old_quota->{$limit_key}, $old_quota->{$used_key}) &&
 		 over_quota($new_quota->{$limit_key}, $old_quota->{$used_key})) {
-		error_exit($old_quota->{"type"}." ".$old_quota->{"name"}." is not currently over ".$limit_key." quota but new quota would put it over quota: refusing without --force-".$limit_key);
+		error_exit($old_quota->{"type"}." ".$old_quota->{"name"}." is not currently over ".$limit_key." quota but new quota would put it over quota. if you meant to do this, retry with --force-".$limit_key." or increase $limit_key to at least ".convert_from_bytes_human($old_quota->{$used_key}));
 	    }
 	}
     }
@@ -1725,10 +1790,10 @@ sub convert_from_bytes {
 sub convert_to_bytes {
     my $formatted = shift;
     
-    $formatted =~ m/^([0-9]+)[[:space:]]*((B|KiB|MiB|GiB|TiB|PiB|EiB|ZiB|YiB|kB|MB|GB|TB|PB|EB|ZB|YB){0,1})$/ or error_exit("convert_to_bytes: malformatted string [$formatted]");
+    $formatted =~ m/^([0-9]+([.][0-9]+)?)[[:space:]]*((B|KiB|MiB|GiB|TiB|PiB|EiB|ZiB|YiB|kB|MB|GB|TB|PB|EB|ZB|YB){0,1})$/ or error_exit("convert_to_bytes: malformatted string [$formatted]");
     
     my $value = $1;
-    my $units = $2 || "B";
+    my $units = $3 || "B";
     
     # fixed unit specification requiring conversion
     for (my $i=0; $i<@{$BINARY_UNIT_LABELS}; $i++) {
@@ -1772,6 +1837,33 @@ sub convert_from_inodes {
 	error_exit("unknown inode units [$units]. specify one of: ".join(', ', @{$DECIMAL_PREFIXES}, 'human'));
     } 
 } 
+
+#################################################################################
+# convert_to_inodes - convert from formatted units to inodes
+# 
+# Inputs
+#    1: formatted string with value and units (e.g. "1.5TiB")
+# Returns
+#    inodes
+#################################################################################
+sub convert_to_inodes {
+    my $formatted = shift;
+    
+    $formatted =~ m/^([0-9]+([.][0-9]+)?)[[:space:]]*((k|M|G|T|P|E|Z|Y){0,1})$/ or error_exit("convert_to_inodes: malformatted string [$formatted]");
+    
+    my $value = $1;
+    my $units = $3 || "";
+
+    # fixed unit specification requiring conversion
+    for (my $i=0; $i<@{$DECIMAL_PREFIXES}; $i++) {
+	if ($DECIMAL_PREFIXES->[$i] eq $units) {
+	    return sprintf("%d", ($value * (1000 ** $i)));
+	}
+    }
+    
+    error_exit("unknown size units [$units]. specify one of: ".join(', ', @{$DECIMAL_PREFIXES}));
+}
+
 
 #################################################################################
 # convert_from_seconds - convert seconds to formatted units
