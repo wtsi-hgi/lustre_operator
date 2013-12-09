@@ -699,7 +699,7 @@ sub run_setquota {
 #    2: lustre mount point
 #    remaining: list of command-line arguments following the find command
 # Returns
-#    Nothing (never returns)
+#    Nothing (never returns) 
 #################################################################################
 sub run_find {
     my $lfs_bin = shift;
@@ -713,15 +713,16 @@ sub run_find {
     my @dir_or_file_list;
   DIRFILEARG: while (my $dir_or_file = shift @args) {
       if (defined($dir_or_file) && $dir_or_file !~ m/^--/) {
-	  # have a non-option argument, must start with $filesystem and be located on the same device as $filesystem ($fs_dev) 
-	  $dir_or_file =~ m/^($filesystem.*)$/ or error_exit_usage("<dir|file> $dir_or_file must begin with $filesystem", "FIND");
-	  $dir_or_file = $1;
-	  
+	  # have a non-option argument, must be a valid path to plain file or dir (possibly following symlinks)
+	  # and must be located on the same device as $filesystem ($fs_dev) 
+	  # this is sufficient for security as `lfs find` will not follow symlinks during the find traversal
+	  $dir_or_file = untaint_valid_path($dir_or_file) or error_exit_usage("$dir_or_file is not a valid path", "FIND");
+
 	  # verify that $dir_or_file is either a plain file or dir (-f and -d will follow symlinks, as does `lfs find`)
-	  ( -f $dir_or_file || -d $dir_or_file ) or error_exit_usage("$dir_or_file is not a plain file or directory", "FIND");
+	  ( -f $dir_or_file || -d $dir_or_file ) or error_exit("$dir_or_file is not a plain file or directory");
 	  
 	  # stat also follows symlinks, so in case of symlinks it is the target stat that we will get
-	  (my $dir_or_file_dev, undef) = stat $dir_or_file or error_exit_usage("could not stat <dir|file> $dir_or_file", "FIND");
+	  (my $dir_or_file_dev, undef) = stat $dir_or_file or error_exit("could not stat <dir|file> $dir_or_file");
 	  
 	  # verify dir_or_file's dev is the same as the filesystem's dev
 	  ($dir_or_file_dev == $fs_dev) or error_exit("$dir_or_file and $filesystem are not on the same device ($dir_or_file is on device $dir_or_file_dev but $filesystem is on device $fs_dev)");
@@ -1077,6 +1078,25 @@ sub untaint_valid_abs_path {
 sub valid_abs_path {
     my $filepath = shift;
     ($filepath =~ /^\//) and valid_path($filepath) ? 1 : undef;
+}
+
+#################################################################################
+# untaint_valid_path - return untainted path if it appears valid
+# 
+# Inputs
+#    1: path
+# Returns
+#    untainted path or undef if not valid
+#################################################################################
+sub untaint_valid_path {
+    my $filepath = shift;
+    if (valid_path($filepath)) {
+	$filepath =~ m/^(.*)$/;
+	$filepath = $1;
+	return $filepath;
+    } else {
+	return undef;
+    }
 }
 
 #################################################################################
