@@ -246,16 +246,6 @@ lustre_operator B<<lfs_binary>> B<<lustre_filesystem>> setquota
 
 =over
 
-=item -u|--user|-g|--group <<uname>>|<<uid>>|<<gname>>|<<gid>>
-
-Specify user or group by either name or number. 
-
-=back
-
-=head2 OPTIONS
-
-=over
-
 =item [--help|-?]
 
 Print setquota documentation to STDOUT and exit
