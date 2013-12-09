@@ -254,6 +254,8 @@ Print setquota documentation to STDOUT and exit
 
 Set the size softlimit, specified in bytes or in specified units (e.g. "1.5TB" or "2 GiB")
 
+Unit labels supported: "B", "kB", "KiB", "MB", "MiB", "GB", "GiB", "TB", "TiB", "PB", "PiB", "EB", "EiB", "ZB", "ZiB", "YB", "YiB"
+
 =item [--force-size-softlimit]
 
 Force setting of size softlimit, even if it will put user(s) and/or group(s) over quota
@@ -261,6 +263,8 @@ Force setting of size softlimit, even if it will put user(s) and/or group(s) ove
 =item [--size-hardlimit|-B <<size-hardlimit>>]
 
 Set the size hardlimit, specified in bytes or in specified units (e.g. "1.5TB" or "2 GiB")
+
+Unit labels supported: "B", "kB", "KiB", "MB", "MiB", "GB", "GiB", "TB", "TiB", "PB", "PiB", "EB", "EiB", "ZB", "ZiB", "YB", "YiB"
 
 =item [--force-size-hardlimit]
 
@@ -270,6 +274,8 @@ Force setting of size hardlimit, even if it will put user(s) and/or group(s) ove
 
 Set the inode softlimit, specified in number of files or with specified SI prefix (e.g. "1.5M" for 1500000)
 
+Unit labels supported: "k", "M", "G", "T", "P", "E", "Z", "Y"
+
 =item [--force-inode-softlimit]
 
 Force setting of inode softlimit, even if it will put user(s) and/or group(s) over quota
@@ -277,6 +283,8 @@ Force setting of inode softlimit, even if it will put user(s) and/or group(s) ov
 =item [--inode-hardlimit|-I <<inode-hardlimit>>]
 
 Set the inode hardlimit, specified in number of files or with specified SI prefix (e.g. "1.5M" for 1500000)
+
+Unit labels supported: "k", "M", "G", "T", "P", "E", "Z", "Y"
 
 =item [--force-inode-hardlimit]
 
