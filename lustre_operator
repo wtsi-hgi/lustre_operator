@@ -256,17 +256,31 @@ Set the size softlimit, specified in bytes or in specified units (e.g. "1.5TB" o
 
 =item [--force-size-softlimit]
 
+Force setting of size softlimit, even if it will put user(s) and/or group(s) over quota
+
 =item [--size-hardlimit|-B <<size-hardlimit>>]
+
+Set the size hardlimit, specified in bytes or in specified units (e.g. "1.5TB" or "2 GiB")
 
 =item [--force-size-hardlimit]
 
+Force setting of size hardlimit, even if it will put user(s) and/or group(s) over quota
+
 =item [--inode-softlimit|-i <<inode-softlimit>>]
+
+Set the inode softlimit, specified in number of files or with specified SI prefix (e.g. "1.5M" for 1500000)
 
 =item [--force-inode-softlimit]
 
+Force setting of inode softlimit, even if it will put user(s) and/or group(s) over quota
+
 =item [--inode-hardlimit|-I <<inode-hardlimit>>]
 
+Set the inode hardlimit, specified in number of files or with specified SI prefix (e.g. "1.5M" for 1500000)
+
 =item [--force-inode-hardlimit]
+
+Force setting of inode hardlimit, even if it will put user(s) and/or group(s) over quota
 
 =back
 
@@ -1832,7 +1846,7 @@ sub convert_from_inodes {
 # convert_to_inodes - convert from formatted units to inodes
 # 
 # Inputs
-#    1: formatted string with value and units (e.g. "1.5TiB")
+#    1: formatted string with value and units (e.g. "1.5M" for 1500000)
 # Returns
 #    inodes
 #################################################################################
