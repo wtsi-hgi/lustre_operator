@@ -124,16 +124,28 @@ Supports the C<getquota>, C<setquota>, and C<find> lfs commands.
 
 =item B<lfs_binary>
 
-An absolute path to the lfs binary.
+An absolute path to the lfs binary.  
+
+For security reasons when using this script with sudo, the path to the lfs binary should 
+ALWAYS be included in the sudoers rule and the lfs binary itself should not be writable 
+by any unauthorised users on any host on which users are given sudo access 
+(see CONFIGURATION AND ENVIRONMENT) for more information. If you allowed sudo execution 
+of lustre_operator without specifying the lfs_binary in the sudoers rule, this would 
+open a gaping whole for a root exploit. 
 
 =item B<lustre_filesystem>
 
 An absolute path to the lustre filesystem mount point, as specified 
-in F</proc/mounts> and/or F</etc/mtab> (and reported by I<mount>).
+in F</proc/mounts> and/or F</etc/mtab> (and reported by I<mount>). 
+
+This can also be specified in the sudoers rule to limit user(s) to operating specific filesystems. 
 
 =item B<command>
 
 Command (C<getquota>, C<setquota>, or C<find>) to run.
+
+This could also be specified in the sudoers file in order to limit user(s) to running only some 
+commands on specific filesystems. 
 
 =back
 
@@ -451,7 +463,14 @@ sub run {
 	exit_full_help();
     }
     my $lfs_bin_taint = shift @args or error_exit_usage("Must specify absolute path to lfs binary as first argument", "GENERAL");
+    # absolute path not strictly required for security, but we are forcing it to 
+    # be required to suggest good practice (especially when running via sudo)
     my $lfs_bin = untaint_valid_abs_path($lfs_bin_taint) or error_exit_usage("Specified lfs binary [$lfs_bin_taint] is not a valid absolute path", "GENERAL");
+    # not only should lfs_bin be an absolute path but it should be executable and 
+    # it should be either a plain file or a symbolic link. 
+    # The real security here comes from requiring the lfs binary to be included 
+    # at the beginning of the command line such that it can be included in a 
+    # sudoers rule (it should ALWAYS be included in sudoers)
     (-x $lfs_bin && (-f $lfs_bin || -l $lfs_bin)) or error_exit_usage("Specified lfs binary [$lfs_bin] is not executable", "GENERAL");
     
     my $lustre_filesystem_taint = shift @args or error_exit_usage("Must specify lustre_filesystem as second argument", "GENERAL");
@@ -1022,6 +1041,14 @@ sub untaint_valid_mount_point {
     my $mount_point = shift;
     my $validated_filesystem = undef;
 
+    # We need to untaint the mount_point input. There is no problem per se with it 
+    # being non-absolute or non-canonical - the real test is whether it is listed 
+    # in /proc/mounts or /etc/mtab.  However, we do require it to be an absolute path 
+    # because (a) that is usual for mount point specification anyway and (b) the 
+    # valid_path check (included within valid_abs_path) also makes sure that there are 
+    # no illegal characters (such as shell metacharacters). We never call a shell to 
+    # interpret the commands, so this is extra paranoid (but it would protect against 
+    # exotic situations such as if the lfs binary was replaced by a shell wrapper). 
     if ( valid_abs_path($mount_point) ) {
 	# have valid path based on regex, check for it in /proc/mounts or /etc/mtab
 	my $mfile = "/proc/mounts";
@@ -1256,6 +1283,7 @@ sub exec_lfs {
     %ENV = ();
 
     # call exec and never return (unless command is not found)
+    # uses multiple-argument form of exec so that the shell is not invoked
     exec { $lfs_bin } $lfs_bin, @lfs_args or error_exit("couldn't exec $lfs_bin");
     
     error_exit("unexpectedly reached end of exec_lfs");
@@ -2039,8 +2067,12 @@ variables.
 
 You can configure Lustre operators to be able to run this command as root by 
 adding an appropriate line to the F</etc/sudoers> file listing the full path 
-to this script followed by the mount point of the Lustre file system for 
-which they are allowed to run it.
+to this script, followed by the path to the lfs binary (it would be wise 
+to ensure that path is actually an lfs binary and not a root exploit and that 
+it is not writable by unauthorised users), and optionally followed by the mount 
+point of the Lustre file system for which they are allowed to act as operator.  
+If you leave off the filesystem from the sudoers rule, the user would be able 
+to administer any filesystem. 
 
 For example:
 C<user1 ALL = (root) NOPASSWD : /usr/local/bin/lustre_operator /usr/bin/lfs /mnt/lustre1, \
