@@ -914,7 +914,8 @@ sub run_find {
 	$size =~ m/^([-+]{0,1})([0-9]+(B|KiB|MiB|GiB|TiB|PiB|EiB|ZiB|YiB|kB|MB|GB|TB|PB|EB|ZB|YB){0,1})$/ or error_exit_usage("size was not [+-]N[B|KiB|MiB|GiB|TiB|PiB|EiB|ZiB|YiB|kB|MB|GB|TB|PB|EB|ZB|YB] ($size)", "FIND");
 	my $plus_minus = $1;
 	my $formatted_units = $2;
-	my $bytes = convert_to_bytes($formatted_units) or error_exit("could not convert size units to bytes ($size)");
+	my $bytes = convert_to_bytes($formatted_units);
+	defined($bytes) or error_exit("could not convert size units to bytes ($size)");
 	push @lfs_args, '--size', $plus_minus.$bytes;
     }
 
@@ -923,7 +924,8 @@ sub run_find {
 	$not_size =~ m/^([-+]{0,1})([0-9]+(B|KiB|MiB|GiB|TiB|PiB|EiB|ZiB|YiB|kB|MB|GB|TB|PB|EB|ZB|YB){0,1})$/ or error_exit_usage("not_size was not [+-]N[B|KiB|MiB|GiB|TiB|PiB|EiB|ZiB|YiB|kB|MB|GB|TB|PB|EB|ZB|YB] ($size)", "FIND");
 	my $plus_minus = $1;
 	my $formatted_units = $2;
-	my $bytes = convert_to_bytes($formatted_units) or error_exit("could not convert not_size units to bytes ($not_size)");
+	my $bytes = convert_to_bytes($formatted_units);
+	defined($bytes) or error_exit("could not convert not_size units to bytes ($not_size)");
 	push @lfs_args, '!', '--size', $plus_minus.$bytes;
     }
 
@@ -1150,7 +1152,8 @@ sub valid_path {
 #################################################################################
 sub over_quota {
     my $quota = shift || $NO_QUOTA;
-    my $used = shift or error_exit("over_quota called without used value");
+    my $used = shift;
+    defined($used) or error_exit("over_quota called without used value");
 
     $quota =~ m/^($NO_QUOTA|[0-9]+)$/ or error_exit("quota [$quota] was neither $NO_QUOTA nor an integer");
 
