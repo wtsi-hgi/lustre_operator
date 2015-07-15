@@ -1,0 +1,56 @@
+[
+    {
+	"name": "limit getquota and setquota to only groups in list",
+	"subcommands": ["getquota", "setquota"],
+	"rules": [
+	    {
+		"action": "allow",
+		"type": "group",
+		"regexes": ["group_a", "group_b", "group_c"]
+	    },
+	    {
+		"action": "deny",
+		"type": "group",
+		"regexes": [".*"]
+	    }
+	]
+    },
+    {
+	"name": "don't allow setquota on users at all",
+	"subcommands": ["setquota"],
+	"rules": [
+	    {
+		"action": "deny",
+		"type": "user",
+		"regexes": [".*"]
+	    }
+	]
+    },
+    {
+	"name": "limit find paths",
+	"subcommands": ["find"],
+	"rules": [
+	    {
+		"action": "deny",
+		"type": "path",
+		"regexes": [
+		    "^/lustre/shared/group_a/group_d/.*"
+		]
+	    },
+	    {
+		"action": "allow",
+		"type": "path",
+		"regexes": [
+		    "^/lustre/shared/group_a/.*", 
+		    "^/lustre/shared/group_b/.*", 
+		    "^/lustre/shared/group_c/.*"
+		]
+	    },
+	    {
+		"action": "deny",
+		"type": "path",
+		"regexes": [".*"]
+	    }
+	]
+    }
+]

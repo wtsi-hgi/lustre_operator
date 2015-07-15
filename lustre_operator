@@ -1,7 +1,7 @@
 #!/usr/bin/perl -T 
 #################################################################################
 #
-# Copyright (c) 2013 Genome Research Ltd.
+# Copyright (c) 2013, 2015 Genome Research Ltd.
 # 
 # Author: Joshua C. Randall <jcrandall@alum.mit.edu>
 # 
@@ -41,6 +41,8 @@ use DateTime;
 use List::Util qw(min);
 use JSON::XS;
 use Data::Dumper;
+use Digest::SHA qw(sha256_hex);
+use Cwd qw(abs_path);
 
 #################################################################################
 # Configuration
@@ -476,7 +478,123 @@ sub run {
     my $lustre_filesystem_taint = shift @args or error_exit_usage("Must specify lustre_filesystem as second argument", "GENERAL");
     # verify that lustre_filesystem is listed in /proc/mounts or /etc/mtab (and untaint)
     my $lustre_filesystem = untaint_valid_mount_point($lustre_filesystem_taint) or error_exit("Invalid lustre filesystem [$lustre_filesystem_taint], must specify absolute path to lustre mount point (as listed in /proc/mounts or /etc/mtab)");
-    
+
+    # optional additional constraints can be specified as --constraints=FILENAME:SHA256HASH
+    # if this is specified, lustre_operator will first verify that the SHA256 hash of 
+    # the contents of the constraints file specified by FILENAME is exactly as specified 
+    # and, if it is, attempt to read constraints from the file (in JSON format). 
+    # 
+    # If the constraints file SHA256 hash does not match, the observed SHA256 hash 
+    # will be printed and lustre_operator will exit with an error. 
+    #
+    # If the constraints file SHA256 hash does match, the JSON will be parsed and 
+    # the specified constraints will be passed to the relevant subcommands to be 
+    # enforced. 
+    #
+    # For an example constraints file, see `constraints.example.json`
+    my $constraints = undef;
+    my $constraints_spec = shift @args;
+    if (defined($constraints_spec)) {
+	if ($constraints_spec =~ m/^(.*):(.*)$/) {
+	    my $constraint_file_taint = $1;
+	    my $required_sha256 = $2;
+	    
+	    my $constraint_file = untaint_valid_abs_path($constraint_file_taint) or error_exit_usage("Specified constraint file [$constraint_file_taint] is not valid absolute path", "GENERAL");
+	    
+	    # slurp constraint file
+	    my $constraint_json = "";
+	    open(my $constraint_fh, '<:encoding(UTF-8)', $constraint_file) or error_exit("Constraint file [$constraint_file] could not be opened for reading");
+	    while(my $line = <$constraint_fh>) {
+		$constraint_json .= $line;
+	    }
+	    close $constraint_fh;
+	    
+	    # calculate sha256 hash of constraint_json
+	    my $found_sha256 = sha256_hex($constraint_json);
+	    
+	    # verify that what we found is what we require
+	    if ($found_sha256 ne $required_sha256) {
+		if ($required_sha256 eq '*') {
+		    print STDERR "Not validating required SHA256 '*' (development mode, found SHA256: [$found_sha256]\n";
+		} else {
+		    error_exit("Constraint file SHA256 did not match requirement. Found SHA256: [$found_sha256] but require [$required_sha256]");
+		}
+	    }
+	    
+	    # parse JSON
+	    $constraints = decode_json($constraint_json) or error_exit("Could not parse constraint file [$constraint_file] as JSON");
+
+	    # validate constraints
+	    my %constraint_names; 
+	    if (ref($constraints) eq "ARRAY") {
+		# ok, we have an array of constraints - make sure each entry is a hash ref with name, subcommands, and limit entries
+		foreach my $constraint (@${constraints}) {
+		    if (ref($constraint) ne "HASH") {
+			error_exit("Constraint is not a JSON dictionary: " . Dumper($constraint));
+		    }
+		    if (!exists($constraint->{"name"})) {
+			error_exit("Constraint does not have required entry name: " . Dumper($constraint));
+		    } else {
+			# ensure names are unique
+			if(exists($constraint_names{$constraint->{"name"}})) {
+			    error_exit("Constraint name is not unique: " . Dumper($constraint));
+			} else {
+			    $constraint_names{$constraint->{"name"}} = 1;
+			}
+		    }
+		    if (!exists($constraint->{"subcommands"})) {
+			error_exit("Constraint does not have required entry subcommands: " . Dumper($constraint));
+		    }
+		    if (!exists($constraint->{"rules"})) {
+			error_exit("Constraint does not have required entry rules: " . Dumper($constraint));
+		    }
+		    # verify that all subcommands are in the supported list
+		    my $subcommands = $constraint->{"subcommands"};
+		    foreach my $subcommand (@$subcommands) {
+			$subcommand =~ m/^(getquota|setquota|find)$/ or error_exit("Constraints specifies unknown subcommand: $subcommand");
+		    }
+		    # verify that rules is an array ref
+		    if (ref($constraint->{"rules"}) ne "ARRAY") {
+			error_exit("Constraint rules is not an array: " . Dumper($constraint));
+		    } 
+		    foreach my $rule (@{$constraint->{"rules"}}) {
+			# verify that every rule has a supported 'action' 
+			if (exists($rule->{'action'})) {
+			    if (! ($rule->{'action'} =~ m/^(allow|deny)$/ )) {
+				error_exit("Constraint rule has invalid value for 'action' field (must be 'allow' or 'deny'): " . Dumper($rule));
+			    }
+			} else {
+			    error_exit("Constraint rule does not have required 'action' field: " . Dumper($rule));
+			}
+
+			# verify that every rule has a supported 'type' 
+			if (exists($rule->{'type'})) {
+			    if (! ($rule->{'type'} =~ m/^(user|group|path)$/ )) {
+				error_exit("Constraint rule has invalid value for 'type' field (must be 'user', 'group', or 'path'): " . Dumper($rule));
+			    }
+			} else {
+			    error_exit("Constraint rule does not have required 'type' field: " . Dumper($rule));
+			}
+
+			# if rule a 'regexes' field verify that it contains valid regexes (or is empty)
+			if (exists($rule->{'regexes'})) {
+			    foreach my $regex (@{$rule->{'regexes'}}) {
+				if (!eval { qr/$regex/; }) {
+				    error_exit("Constraint regex could not be compiled: '$regex'");
+				}
+			    }
+			}
+		    } 
+		}
+	    } else {
+		error_exit("Constraints file does not contain an array of constraints at the top-level: " . Dumper($constraints));
+	    }
+	} else {
+	    # we don't have a constraint specification so this must be a subcommand, push it back on @args
+	    unshift @args, $constraints_spec;
+	}
+    }
+
     my $lfs_cmd = shift @args or error_exit_usage("Must specify getquota, setquota, or find as third argument", "GENERAL");
     $lfs_cmd =~ m/^(getquota|setquota|find|[-]\S+)$/ or error_exit_usage("Unrecognized command: $lfs_cmd");
 
@@ -484,19 +602,26 @@ sub run {
     # Launch subcommand handlers
     #############################################################################
     if ($lfs_cmd eq "getquota") {
-	run_getquota($lfs_bin, $lustre_filesystem,  @args);
+	run_getquota($lfs_bin, $lustre_filesystem, $constraints, @args);
     } elsif ($lfs_cmd eq "setquota") {
-	run_setquota($lfs_bin, $lustre_filesystem, @args);
+	run_setquota($lfs_bin, $lustre_filesystem, $constraints, @args);
     } elsif ($lfs_cmd eq "find") {
-	run_find($lfs_bin, $lustre_filesystem, @args);
+	run_find($lfs_bin, $lustre_filesystem, $constraints, @args);
     } else {
 	# did not specify command, check for generic options
 	unshift @args, $lfs_cmd;
 	my $help = 0;
+	my $dump_constraints = 0;
 	GetOptionsFromArray( \@args,
-			     'help|?' => \$help ) or error_exit_usage("could not process generic options", "GENERAL");
+			     'help|?' => \$help,
+			     'dump-constraints' => \$dump_constraints) or error_exit_usage("could not process generic options", "GENERAL");
 	if ($help) {
 	    exit_full_help();
+	}
+	if ($dump_constraints) {
+	    print "Constraints are:\n";
+	    print Dumper($constraints);
+	    exit(0);
 	}
     }
 }
@@ -510,6 +635,7 @@ sub run {
 # Inputs
 #    1: lfs binary
 #    2: lustre mount point
+#    3: constraints to apply (undef is there are no constraints)
 #    remaining: list of command-line arguments following the find command
 # Returns
 #    Nothing (never returns)
@@ -517,6 +643,7 @@ sub run {
 sub run_getquota {
     my $lfs_bin = shift;
     my $filesystem = shift;
+    my $constraints = shift;
     my @args = @_;
 
     # getquota: Display disk usage and limits.
@@ -574,6 +701,9 @@ sub run_getquota {
     
     ($format =~ m/^(json|csv|tsv|spacesv|dumper)$/) or error_exit_usage("Unsupported format $format", "GETQUOTA");
 
+    all_users_valid_or_die($constraints, "getquota", @users);
+    all_groups_valid_or_die($constraints, "getquota", @groups);
+
     # get quotas into hash
     my %quotas;
     foreach my $user (@users) {
@@ -596,6 +726,7 @@ sub run_getquota {
 # Inputs
 #    1: lfs binary
 #    2: lustre mount point
+#    3: constraints to apply (undef is there are no constraints)
 #    remaining: list of command-line arguments following the find command
 # Returns
 #    Nothing (never returns)
@@ -603,6 +734,7 @@ sub run_getquota {
 sub run_setquota {
     my $lfs_bin = shift;
     my $filesystem = shift;
+    my $constraints = shift;
     my @args = @_;
 
     # options
@@ -683,6 +815,9 @@ sub run_setquota {
 	error_exit("no limits specified, nothing to do.");
     }
 
+    all_users_valid_or_die($constraints, "setquota", @users);
+    all_groups_valid_or_die($constraints, "setquota", @groups);
+
     if ( keys %checkquota > 0 ) {
 	# check the existing quota for each user and group against the new proposed quota
 	# refuse to set quota over the existing usage without a --force-* option
@@ -716,6 +851,7 @@ sub run_setquota {
 # Inputs
 #    1: lfs binary
 #    2: lustre mount point
+#    3: constraints to apply (undef is there are no constraints)
 #    remaining: list of command-line arguments following the find command
 # Returns
 #    Nothing (never returns) 
@@ -723,6 +859,7 @@ sub run_setquota {
 sub run_find {
     my $lfs_bin = shift;
     my $filesystem = shift;
+    my $constraints = shift;
     my @args = @_;
 
     # stat the mount point to get the dev_t for the filesystem (to check each <dir|file> entry against)
@@ -745,6 +882,7 @@ sub run_find {
 	  
 	  # verify dir_or_file's dev is the same as the filesystem's dev
 	  ($dir_or_file_dev == $fs_dev) or error_exit("$dir_or_file and $filesystem are not on the same device ($dir_or_file is on device $dir_or_file_dev but $filesystem is on device $fs_dev)");
+
 	  push @dir_or_file_list, $dir_or_file;
       } else {
 	  # have either an option argument (starting with '--') or no argument, put it back
@@ -753,6 +891,10 @@ sub run_find {
 	  last DIRFILEARG;
       }
   }
+
+    if (defined($constraints)) {
+	all_paths_valid_or_die($constraints, "find", @dir_or_file_list);
+    }
     
     # get options
     my $print0 = 0;
@@ -2043,6 +2185,145 @@ sub convert_from_seconds_human {
     return $result;
 }
 
+#################################################################################
+# all_items_valid_or_die - validate constraints on list of items
+# 
+# Inputs
+#    1: constraints ref
+#    2: subcommand 
+#    3: item type
+#    4: list of items
+# Returns
+#    1 if valid, prints an error message and exits if not
+#################################################################################
+sub all_items_valid_or_die {
+    my $constraints = shift;
+    my $subcommand = shift;
+    my $item_type = shift;
+    my @items = @_;
+
+    foreach my $item (@items) {
+	CONSTRAINT: foreach my $constraint (@$constraints) {
+	    my $cname = $constraint->{'name'};
+	    if ( grep(/^$subcommand$/, @{$constraint->{'subcommands'}}) ) {
+		# this constraint applies to this subcommand
+		my @rules = @{$constraint->{'rules'}};
+		my $rule_number = 0;
+		RULE: foreach my $rule (@rules) {
+		    $rule_number++;
+		    # default action is to deny
+		    my $action = "deny";
+		    if (exists($rule->{'action'})) {
+			$action = $rule->{'action'};
+		    }
+		    if (exists($rule->{'type'})) {
+			if ($rule->{'type'} ne $item_type) {
+			    next RULE;
+			}
+		    } else {
+			error_exit("Constraint '$cname' was missing required field 'type'");
+		    }
+		    if (exists($rule->{'regexes'})) {
+			# we have a list of regexes to either allow or deny for this item_type
+			my $regex_num = 0;
+			foreach my $regex (@{$rule->{'regexes'}}) {
+			    $regex_num++;
+			    if ($item =~ m/$regex/) {
+				# match! 
+				if ($action eq "allow") {
+				    # this item is valid for this constraint, skip to next constraint
+				    next CONSTRAINT;
+				} elsif ($action eq "deny") {
+				    # this item is not valid for this constraint, exit with error
+				    error_exit("Constraint '$cname' failed for $item_type $item (rule #${rule_number}: $action $item_type matching regex #${regex_num} = '$regex')");
+				} else {
+				    error_exit("Invalid action: $action in constraint '$cname'");
+				}
+			    }
+			}
+		    } else {
+			# regex list missing for this item type, continue with next rule
+			next RULE;
+		    }
+		}
+	    }
+	}
+    }
+}
+    
+#################################################################################
+# all_users_valid_or_die - validate constraints on list of users
+# 
+# Inputs
+#    1: constraints ref
+#    2: subcommand 
+#    3: list of users
+# Returns
+#    1 if valid, prints an error message and exits if not
+#################################################################################
+sub all_users_valid_or_die {
+    my $constraints = shift;
+    my $subcommand = shift;
+    my @users = @_;
+    
+    if (scalar @users == 0) {
+	return 1;
+    }
+
+    return all_items_valid_or_die($constraints, $subcommand, "user", @users);
+}
+
+#################################################################################
+# all_groups_valid_or_die - validate constraints on list of groups
+# 
+# Inputs
+#    1: constraints ref
+#    2: subcommand
+#    3: list of groups
+# Returns
+#    1 if valid, prints an error message and exits if not
+#################################################################################
+sub all_groups_valid_or_die {
+    my $constraints = shift;
+    my $subcommand = shift;
+    my @groups = @_;
+    
+    if (scalar @groups == 0) {
+	return 1;
+    }
+    
+    return all_items_valid_or_die($constraints, $subcommand, "group", @groups);
+}
+
+#################################################################################
+# all_paths_valid_or_die - validate constraints on list of paths
+# 
+# Inputs
+#    1: constraints ref
+#    2: subcommand
+#    3: list of paths
+# Returns
+#    1 if valid, prints an error message and exits if not
+#################################################################################
+sub all_paths_valid_or_die {
+    my $constraints = shift;
+    my $subcommand = shift;
+    my @paths = @_;
+    
+    if (scalar @paths == 0) {
+	return 1;
+    }
+
+    my @abs_paths;
+    foreach my $path (@paths) {
+	# abs_path will resolve symlinks and relative-path components 
+	# to get a canonical pathname to test for validity
+	push @abs_paths, abs_path($path);
+    }
+    
+    return all_items_valid_or_die($constraints, $subcommand, "path", @abs_paths);
+}
+
 
 __END__
 
@@ -2119,7 +2400,7 @@ Joshua C. Randall (jcrandall@alum.mit.edu)
 
 =head1 LICENCE AND COPYRIGHT
 
-Copyright (c) 2013 Genome Research Ltd.
+Copyright (c) 2013, 2015 Genome Research Ltd.
 
 This program is free software: you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
