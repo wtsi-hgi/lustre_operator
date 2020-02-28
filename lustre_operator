@@ -1536,12 +1536,12 @@ sub lfs_get_quota {
     my $usergroupname = "";
     my $ugid = -1;
     if ($quota_type eq 'user') {
-	$usergroupline =~ m/user\s(\S+)/ or error_exit("could not find user in lfs quota output for $filesystem $quota_type $quota_name");
+	$usergroupline =~ m/usr\s(\S+)/ or error_exit("could not find user in lfs quota output for $filesystem $quota_type $quota_name");
 	$usergroupname = $1;
 	$usergroupline =~ m/uid\s([0-9]+)/ or error_exit("could not find uid in lfs quota output for $filesystem $quota_type $quota_name");
 	$ugid = $1;
     } elsif ($quota_type eq 'group') {
-	$usergroupline =~ m/group\s(\S+)/ or error_exit("could not find group in lfs quota output for $filesystem $quota_type $quota_name");
+	$usergroupline =~ m/grp\s(\S+)/ or error_exit("could not find group in lfs quota output for $filesystem $quota_type $quota_name");
 	$usergroupname = $1;
 	$usergroupline =~ m/gid\s([0-9]+)/ or error_exit("could not find gid in lfs quota output for $filesystem $quota_type $quota_name");
 	$ugid = $1;
